@@ -5,6 +5,7 @@ import parameter_pkg::*;
 import register_pkg::*;
 import debug_pkg::*;
 import instruction_pkg::*;
+import typedef_pkg::*;
 module IssueExecution_tb();
     logic clk;
     logic rst;
