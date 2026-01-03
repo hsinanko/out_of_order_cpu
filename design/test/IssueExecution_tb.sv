@@ -30,7 +30,7 @@ module IssueExecution_tb();
         // Testbench initialization and stimulus code
         clk = 0;
         rst = 1;
-        $display("\n=========== Simulation started ===========\n");
+        $display("\n\t=========== Simulation started ===========\n");
 
         #10; rst = 0;
     end
@@ -41,7 +41,7 @@ module IssueExecution_tb();
         if(rst) begin
             n_cycles <= 0;
         end
-        else if(n_cycles < 20)begin
+        else if(n_cycles < 30)begin
             n_cycles <= n_cycles + 1;
         end
         else begin

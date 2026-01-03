@@ -14,13 +14,17 @@ COM = \
 		../src/common/ReorderBuffer.sv \
 		../src/common/PhysicalRegister.sv \
 		../src/common/Freelist.sv
+IF = \
+		../src/Fetch/BTB.sv \
+		../src/Fetch/InstructionROM.sv \
+		../src/Fetch/InstructionFetch.sv
+
 ID = \
+		../src/Decode/ReservationStation/FreeSlot.sv \
+		../src/Decode/ReservationStation/ReservationStation.sv \
 		../src/Decode/Dispatch.sv \
 		../src/Decode/Rename.sv \
 		../src/Decode/InstructionDecode.sv 
-IF = \
-		../src/Fetch/InstructionROM.sv \
-		../src/Fetch/InstructionFetch.sv
 
 
 EXE = \
@@ -28,8 +32,6 @@ EXE = \
 		../src/Issue/Execution/ALUUnit/ALU.sv \
 		../src/Issue/Execution/BranchUnit/BranchUnit.sv \
 		../src/Issue/Execution/MEMUnit/MEMUnit.sv \
-		../src/Issue/ReservationStation/FreeSlot.sv \
-		../src/Issue/ReservationStation/ReservationStation.sv \
 		../src/Issue/Issue.sv \
 		../src/Issue/Execution/Execution.sv
 WB = \
