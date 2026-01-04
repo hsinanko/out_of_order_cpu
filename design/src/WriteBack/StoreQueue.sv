@@ -5,6 +5,7 @@ import typedef_pkg::*;
 module StoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, QUEUE = 16)(
     input logic clk,
     input logic rst,
+    input logic flush,
     // from wb stage
     input logic wb_valid,
     input logic [DATA_WIDTH-1:0] wdata_wb,
@@ -19,7 +20,8 @@ module StoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, QUEUE = 16)(
     FIFO #( .DATA_WIDTH(ADDR_WIDTH + DATA_WIDTH), .FIFO_DEPTH(QUEUE) ) store_queue (
         .clk(clk),
         .rst(rst),
-        .write_en(wb_valid),
+        .flush(flush),
+        .write_en((flush) ? 1'b0 : wb_valid),
         .write_data({waddr_wb, wdata_wb}),
         .read_en(store_valid),
         .read_data({mem_waddr, mem_wdata}),

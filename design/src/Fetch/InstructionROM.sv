@@ -3,6 +3,9 @@ import parameter_pkg::*;
 
 module InstructionROM #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
     input  logic [ADDR_WIDTH-1:0]  addr,          // Address input
+    input  logic                   predict_taken, // Branch prediction signal
+    output logic [ADDR_WIDTH-1:0]  instruction_addr_0,   // Fetched Instruction
+    output logic [ADDR_WIDTH-1:0]  instruction_addr_1,   // Fetched Instruction
     output logic [DATA_WIDTH-1:0]  instruction_0,   // Fetched Instruction
     output logic [DATA_WIDTH-1:0]  instruction_1,
     output logic [1:0]             valid
@@ -20,7 +23,7 @@ module InstructionROM #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
         logic [32:0] inst;
 
         count = 0;
-        fd = $fopen("../resources/instructions.txt", "r");
+        fd = $fopen("../resources/instruction.txt", "r");
 
         while (!$feof(fd)) begin
             if ($fscanf(fd, "%h\n", inst) == 1) begin
@@ -41,17 +44,19 @@ module InstructionROM #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
                          instruction_memory[addr + 1], instruction_memory[addr]};
         instruction_1 = {instruction_memory[addr + 7], instruction_memory[addr + 6],
                          instruction_memory[addr + 5], instruction_memory[addr + 4]};
+       
+        instruction_addr_0 = addr;
+       
+        instruction_addr_1 = addr + 4;
+        
         // valid signals
-        if (addr + 4 < count) begin
-            valid[0] = 1;
-        end else begin
-            valid[0] = 0;
-        end
 
-        if (addr + 8 < count) begin
-            valid[1] = 1;
-        end else begin
+        if(predict_taken) begin
+            valid[0] = (addr + 4 <= count) ? 1 : 0;
             valid[1] = 0;
+        end else begin
+            valid[0] = (addr + 4 <= count) ? 1 : 0;
+            valid[1] = (addr + 8 <= count) ? 1 : 0;
         end
 
     end

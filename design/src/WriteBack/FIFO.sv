@@ -4,6 +4,7 @@ import parameter_pkg::*;
 module FIFO #(parameter DATA_WIDTH = 32,parameter FIFO_DEPTH = 16) (
     input logic clk,
     input logic rst,
+    input logic flush,
     input logic write_en,
     input logic [DATA_WIDTH-1:0] write_data,
     input logic read_en,
@@ -23,7 +24,13 @@ module FIFO #(parameter DATA_WIDTH = 32,parameter FIFO_DEPTH = 16) (
            write_ptr <= 0;
            read_ptr <= 0;
            fifo_count <= 0;
-       end else begin
+       end 
+       else if(flush)begin
+            write_ptr <= 0;
+            read_ptr <= 0;
+            fifo_count <= 0;
+       end
+       else begin
            if (write_en && !full) begin
                fifo_mem[write_ptr] <= write_data;
                write_ptr <= write_ptr + 1;

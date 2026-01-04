@@ -6,6 +6,7 @@ import parameter_pkg::*;
 module FreeSlot #(parameter NUM_RS_ENTRIES = 8, TYPE = 0)(
     input logic clk, 
     input logic rst,
+    input logic flush,
     input logic valid_0,
     input logic valid_1,
     output logic [4:0] free_0,           // physical register address to allocate
@@ -18,16 +19,25 @@ module FreeSlot #(parameter NUM_RS_ENTRIES = 8, TYPE = 0)(
     logic [$clog2(NUM_RS_ENTRIES)-1:0] head;                         // points to the next free entry
     logic [$clog2(NUM_RS_ENTRIES)-1:0] tail;                         // points to the next allocated entry
     logic [$clog2(NUM_RS_ENTRIES):0] num_free;                     // number of free entries
-
+    integer i;
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
-            integer i;
-            for (i = 0; i < NUM_RS_ENTRIES; i = i + 1) begin // minus one for PHY_ZERO
-                FREESLOT[i] <= i; // initialize freelist with all physical registers
-                head        <= 0;
-                tail        <= NUM_RS_ENTRIES - 1;
-                num_free    <= NUM_RS_ENTRIES;
+            
+            for (i = 0; i < NUM_RS_ENTRIES; i = i + 1) begin 
+                FREESLOT[i] <= i; 
             end
+            head        <= 0;
+            tail        <= NUM_RS_ENTRIES - 1;
+            num_free    <= NUM_RS_ENTRIES;
+        end
+        else if(flush) begin
+            // On flush, reset head and tail pointers
+            for (i = 0; i < NUM_RS_ENTRIES; i = i + 1) begin 
+                FREESLOT[i] <= i; 
+            end
+            head     <= 0;
+            tail     <= NUM_RS_ENTRIES - 1;
+            num_free <= NUM_RS_ENTRIES;
         end
         else begin
             // Allocate physical registers for renaming

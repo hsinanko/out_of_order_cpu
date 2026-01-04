@@ -4,8 +4,6 @@ import parameter_pkg::*;
 import typedef_pkg::*;
 
 module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PHY_WIDTH = 6)(
-    input logic [ADDR_WIDTH-1:0]instruction_addr, // used by branch unit
-    input logic [DATA_WIDTH-1:0]instruction,
     // from issue stage
     input  RS_ENTRY_t issue_instruction_alu,
     input  RS_ENTRY_t issue_instruction_ls,
@@ -18,17 +16,17 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     output logic [PHY_WIDTH-1:0]rs2_phy_alu, 
     input  logic [DATA_WIDTH-1:0]rs1_data_alu,
     input  logic [DATA_WIDTH-1:0]rs2_data_alu,
-    output logic valid_alu,
+    output logic alu_valid,
     output logic [PHY_WIDTH-1:0]rs1_phy_ls,               
     output logic [PHY_WIDTH-1:0]rs2_phy_ls,
     input  logic [DATA_WIDTH-1:0]rs1_data_ls,
     input  logic [DATA_WIDTH-1:0]rs2_data_ls,
-    output logic valid_ls,
+    output logic ls_valid,
     output logic [PHY_WIDTH-1:0]rs1_phy_branch,               
     output logic [PHY_WIDTH-1:0]rs2_phy_branch, 
     input  logic [DATA_WIDTH-1:0]rs1_data_branch,
     input  logic [DATA_WIDTH-1:0]rs2_data_branch,
-    output logic valid_branch,
+    output logic branch_valid,
     // output to commit stage
     // ALU outputs
     output logic [ROB_WIDTH-1:0]alu_rob_id,
@@ -45,8 +43,10 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     output logic wdata_valid,
     // Branch outputs
     output logic [ROB_WIDTH-1:0]branch_rob_id,
+    output logic isbranchTaken,
+    output logic mispredict,
     output logic [ADDR_WIDTH-1:0] jump_address,
-    output logic [ADDR_WIDTH-1:0] next_address,
+    output logic [PHY_WIDTH-1:0] update_pc,
     output logic [PHY_WIDTH-1:0]rd_phy_branch,
     output logic isJump
 );
@@ -57,7 +57,7 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
 
     assign rs1_phy_alu = issue_instruction_alu.rs1_phy;
     assign rs2_phy_alu = issue_instruction_alu.rs2_phy;
-    assign valid_alu = issue_alu_valid;
+    assign alu_valid = issue_alu_valid;
     ALUControl alu_ctrl(
         .opcode(issue_instruction_alu.opcode),
         .funct7(issue_instruction_alu.funct7),
@@ -97,7 +97,7 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     assign rs1_phy_ls = issue_instruction_ls.rs1_phy;
     assign rs2_phy_ls = issue_instruction_ls.rs2_phy;
     assign funct3_ls = issue_instruction_ls.funct3;
-    assign valid_ls = issue_ls_valid;
+    assign ls_valid = issue_ls_valid;
     always_comb begin
         addr  = rs1_data_ls + issue_instruction_ls.immediate;
         data = rs2_data_ls;
@@ -121,19 +121,23 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     );
     
     // ============== Branch Unit ==================
-
-    assign next_address = (instruction_addr + 'h4);
+    
     assign branch_rob_id = issue_instruction_branch.rob_id;
     assign rd_phy_branch = issue_instruction_branch.rd_phy;
-    assign valid_branch = issue_branch_valid;
+    assign branch_valid = issue_branch_valid;
     BranchUnit #(ADDR_WIDTH, DATA_WIDTH) branchUnit(
-        .instruction_addr(instruction_addr),
+        .instruction_addr(issue_instruction_branch.addr),
         .rs1_data_branch(rs1_data_branch),
         .rs2_data_branch(rs2_data_branch),
         .opcode(issue_instruction_branch.opcode),
         .immediate(issue_instruction_branch.immediate),
         .funct3(issue_instruction_branch.funct3),
-        .jump_address(jump_address),
+        .predict_taken(issue_instruction_branch.predict_taken),
+        .predict_target(issue_instruction_branch.predict_target),
+        .mispredict(mispredict),
+        .isbranchTaken(isbranchTaken),
+        .actual_target(jump_address),
+        .update_pc(update_pc),
         .isJump(isJump)
     );
 

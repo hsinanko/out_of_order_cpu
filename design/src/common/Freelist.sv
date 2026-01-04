@@ -3,6 +3,8 @@
 module Freelist #(parameter PHY_REGS = 64, PHY_WIDTH = 6)(
     input logic clk, 
     input logic rst,
+    input logic flush,
+    // rename interface to allocate physical registers
     input logic [1:0]valid,
     output logic [PHY_WIDTH-1:0] rd_phy_new_0,           // physical register address to allocate
     output logic [PHY_WIDTH-1:0] rd_phy_new_1,            // physical register address to allocate
@@ -26,6 +28,15 @@ module Freelist #(parameter PHY_REGS = 64, PHY_WIDTH = 6)(
                 tail        <= PHY_REGS-2;
                 num_free    <= PHY_REGS-1;
             end
+        end
+        else if(flush) begin
+            // On flush, reset freelist to initial state
+            for (i = 0; i < PHY_REGS-1; i = i + 1) begin // minus one for PHY_ZERO
+                FREELIST[i] <= i; // initialize freelist with all physical registers
+            end
+            head        <= 0;
+            tail        <= PHY_REGS-2;
+            num_free    <= PHY_REGS-1;
         end
         else begin
             // Allocate physical registers for renaming
