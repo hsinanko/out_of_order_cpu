@@ -26,19 +26,12 @@ module InstructionDecode #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
                 decoded_instruction.rs1_addr  = instruction[19:15];
                 decoded_instruction.funct3    = instruction[14:12];
             end
-            OP_IMM: begin
+            OP_IMM, JALR: begin
                 // Decode immediate arithmetic instruction
                 decoded_instruction.immediate = instruction[31:20];
                 decoded_instruction.rs1_addr  = instruction[19:15];
                 decoded_instruction.funct3    = instruction[14:12];
                 decoded_instruction.rd_addr   = instruction[11:7];
-            end
-            STORE: begin
-                // Decode store instruction
-                decoded_instruction.immediate = {instruction[31:25], instruction[11:7]};
-                decoded_instruction.rs2_addr  = instruction[24:20];
-                decoded_instruction.rs1_addr  = instruction[19:15];
-                decoded_instruction.funct3    = instruction[14:12];
             end
             OP: begin
                 // Decode register-register arithmetic instruction
@@ -48,25 +41,22 @@ module InstructionDecode #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
                 decoded_instruction.funct3   = instruction[14:12];
                 decoded_instruction.rd_addr  = instruction[11:7];
             end
-            LUI: begin
+            LUI, AUIPC: begin
                 // Decode load upper immediate
                 decoded_instruction.immediate = {instruction[31:12], 12'h000};
-            end
-            AUIPC: begin
-                // Decode add upper immediate to pc instruction
-                decoded_instruction.immediate = {instruction[31:12], 12'h000};
+                decoded_instruction.rd_addr   = instruction[11:7];
             end
             JAL: begin
                 // Decode jump and link instruction
                 decoded_instruction.immediate = {instruction[31], instruction[19:12], instruction[20], instruction[30:21], 1'b0};
-            end
-            JALR: begin
-                // Decode jump and link register instruction
-                decoded_instruction.immediate = instruction[31:20];
+                decoded_instruction.rd_addr   = instruction[11:7];
             end
             BRANCH: begin
                 // Decode branch instruction
+                decoded_instruction.rs2_addr  = instruction[24:20];
+                decoded_instruction.rs1_addr  = instruction[19:15];
                 decoded_instruction.immediate = {instruction[31], instruction[7], instruction[30:25], instruction[11:8], 1'b0};
+                decoded_instruction.funct3   = instruction[14:12];
             end
             default: begin
                 // Handle other instructions or illegal opcode

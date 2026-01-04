@@ -1,8 +1,35 @@
-00500293 // addi x5, x0, 5
-00300313 // addi x6, x0, 3
-006283B3 // add x7, x5, x6
-00A38E13 // addi x28, x7, 10
-405E0EB3 // sub x29, x28, x5
-00462683 // LW x13, 0(x5)
-00D62023 // SW x13, 4(x12)
-00000013 // nop
+// Program: Array sum with conditional processing
+// Initialize registers
+00500293    // addi x5, x0, 5      # x5 = 5 (array base address) 0
+00300313    // addi x6, x0, 3      # x6 = 3 (counter)            4
+00000393    // addi x7, x0, 0      # x7 = 0 (sum accumulator)    8
+
+// Loop start:
+00052403    // lw x8, 0(x10)       # Load word from memory address in x10 C
+00840433    // add x8, x8, x8      # x8 = x8 * 2 (ALU operation)          10
+00840463    // beq x8, x0, skip    # Branch if x8 == 0 (skip addition)    14
+008383B3    // add x7, x7, x8      # x7 = x7 + x8 (accumulate sum)        18
+
+// skip:
+00752223    // sw x7, 4(x10)       # Store sum to memory                  1C 
+FFE30313    // addi x6, x6, -1     # Decrement counter                    20
+00450513    // addi x10, x10, 4    # Increment address pointer            24
+FE031EE3    // bne x6, x0, loop    # Branch back if counter != 0          28
+
+00000013    // nop                  # End
+
+
+// x5 = 5
+// x6 = 3
+// x7 = 0
+// loop
+// x8 = 0(x10)
+// x8 = x8 + x8
+// if(x8 == 0) addr + 8
+// else addr + 4
+// x7 = x7 + x8
+// store x7 to 4(x10)
+// x6 = x6 - 1
+// x10 = x10 + 4
+// if(x6 != 0) jump to loop
+// nop

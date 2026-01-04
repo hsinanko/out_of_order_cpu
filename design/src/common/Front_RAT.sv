@@ -4,6 +4,7 @@ import parameter_pkg::*;
 module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     input  logic clk,
     input  logic rst,
+    input  logic flush,
     // first instruction
     input  logic [1:0]instr_valid,      // instr_valid[0] = first instruction valid, instr_valid[1] = second instruction valid
     input  logic [4:0] rs1_arch_0,      // architected register address
@@ -62,7 +63,14 @@ module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
             integer i;
             for (i = 0; i < ARCH_REGS; i++)
                 FRONT_RAT[i] <= i;
-        end else begin
+        end 
+        else if(flush)begin
+            // On flush, restore RAT from BACK_RAT
+            for (i = 0; i < ARCH_REGS; i++) begin
+                FRONT_RAT[i] <= back_rat[i*PHY_WIDTH +: PHY_WIDTH];
+            end
+        end
+        else begin
             FRONT_RAT <= rat_tmp;
         end
     end

@@ -6,6 +6,7 @@ import typedef_pkg::*;
 module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REGS = 64, TYPE = 0)(
     input logic clk,
     input logic rst,
+    input logic flush,
     input logic [PHY_REGS-1:0]PRF_valid,
     // ====== dispatch instruction ======
     // first instruction
@@ -16,7 +17,6 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
     input instruction_t dispatch_instruction_1,
     input logic [ROB_WIDTH-1:0] rob_id_1,
     input logic dispatch_valid_1,
-
     // RS --> issue
     output RS_ENTRY_t issue_instruction,
     output logic issue_valid
@@ -36,6 +36,7 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
     FreeSlot #(NUM_RS_ENTRIES, TYPE) free_slot_inst (
         .clk(clk),
         .rst(rst),
+        .flush(flush),
         .valid_0(dispatch_valid_0),
         .valid_1(dispatch_valid_1),
         .free_0(free_slot_0),
@@ -56,34 +57,46 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
             num_free    <= NUM_RS_ENTRIES;
             global_age  <= 5'b0;
         end
+        else if(flush) begin
+            // On flush, invalidate all entries in the reservation station
+            for(i = 0; i < NUM_RS_ENTRIES; i = i + 1)begin
+                RS[i].valid <= 1'b0;
+            end
+            num_free    <= NUM_RS_ENTRIES;
+            global_age  <= 5'b0;
+        end
         else begin
             // Dispatch first instruction
             if(dispatch_valid_0)begin
-                RS[free_slot_0].addr      <= dispatch_instruction_0.instruction_addr;
-                RS[free_slot_0].rob_id    <= rob_id_0;
-                RS[free_slot_0].funct7    <= dispatch_instruction_0.funct7;
-                RS[free_slot_0].funct3    <= dispatch_instruction_0.funct3;
-                RS[free_slot_0].rs1_phy   <= dispatch_instruction_0.rs1_addr;
-                RS[free_slot_0].rs2_phy   <= dispatch_instruction_0.rs2_addr;
-                RS[free_slot_0].rd_phy    <= dispatch_instruction_0.rd_addr;
-                RS[free_slot_0].immediate <= dispatch_instruction_0.immediate;
-                RS[free_slot_0].opcode    <= dispatch_instruction_0.opcode;
-                RS[free_slot_0].age       <= global_age;
-                RS[free_slot_0].valid     <= 1'b1;
+                RS[free_slot_0].addr           <= dispatch_instruction_0.instruction_addr;
+                RS[free_slot_0].rob_id         <= rob_id_0;
+                RS[free_slot_0].funct7         <= dispatch_instruction_0.funct7;
+                RS[free_slot_0].funct3         <= dispatch_instruction_0.funct3;
+                RS[free_slot_0].rs1_phy        <= dispatch_instruction_0.rs1_addr;
+                RS[free_slot_0].rs2_phy        <= dispatch_instruction_0.rs2_addr;
+                RS[free_slot_0].rd_phy         <= dispatch_instruction_0.rd_addr;
+                RS[free_slot_0].immediate      <= dispatch_instruction_0.immediate;
+                RS[free_slot_0].opcode         <= dispatch_instruction_0.opcode;
+                RS[free_slot_0].predict_taken  <= dispatch_instruction_0.predict_taken;
+                RS[free_slot_0].predict_target <= dispatch_instruction_0.predict_target;
+                RS[free_slot_0].age            <= global_age;
+                RS[free_slot_0].valid          <= 1'b1;
             end
             // Dispatch second instruction
-            if(dispatch_valid_1)begin
-                RS[free_slot_1].addr      <= dispatch_instruction_1.instruction_addr;
-                RS[free_slot_1].rob_id    <= rob_id_1;
-                RS[free_slot_1].funct7    <= dispatch_instruction_1.funct7;
-                RS[free_slot_1].funct3    <= dispatch_instruction_1.funct3;
-                RS[free_slot_1].rs1_phy   <= dispatch_instruction_1.rs1_addr;
-                RS[free_slot_1].rs2_phy   <= dispatch_instruction_1.rs2_addr;
-                RS[free_slot_1].rd_phy    <= dispatch_instruction_1.rd_addr;
-                RS[free_slot_1].immediate <= dispatch_instruction_1.immediate;
-                RS[free_slot_1].opcode    <= dispatch_instruction_1.opcode;
-                RS[free_slot_1].age       <= (dispatch_valid_0) ? global_age+1: global_age;
-                RS[free_slot_1].valid     <= 1'b1;
+            if(dispatch_valid_1)begin 
+                RS[free_slot_1].addr           <= dispatch_instruction_1.instruction_addr;
+                RS[free_slot_1].rob_id         <= rob_id_1;
+                RS[free_slot_1].funct7         <= dispatch_instruction_1.funct7;
+                RS[free_slot_1].funct3         <= dispatch_instruction_1.funct3;
+                RS[free_slot_1].rs1_phy        <= dispatch_instruction_1.rs1_addr;
+                RS[free_slot_1].rs2_phy        <= dispatch_instruction_1.rs2_addr;
+                RS[free_slot_1].rd_phy         <= dispatch_instruction_1.rd_addr;
+                RS[free_slot_1].immediate      <= dispatch_instruction_1.immediate;
+                RS[free_slot_1].opcode         <= dispatch_instruction_1.opcode;
+                RS[free_slot_1].predict_taken  <= dispatch_instruction_1.predict_taken;  // this should not happen in BRU
+                RS[free_slot_1].predict_target <= dispatch_instruction_1.predict_target; // this should not happen in BRU
+                RS[free_slot_1].age            <= (dispatch_valid_0) ? global_age+1: global_age;
+                RS[free_slot_1].valid          <= 1'b1;
             end
 
             
@@ -97,36 +110,31 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
     end
 
     
-    always_ff @(posedge clk or posedge rst)begin
-        if(rst)begin
-            issue_instruction.rob_id    <= 'h0;
-            issue_instruction.funct7    <= 'h0;
-            issue_instruction.funct3    <= 'h0;
-            issue_instruction.rs1_phy   <= 'h0;
-            issue_instruction.rs2_phy   <= 'h0;
-            issue_instruction.rd_phy    <= 'h0;
-            issue_instruction.opcode    <= 'h0;
-            issue_instruction.immediate <= 'h0;
+    always@(posedge clk or negedge rst)begin
+        if(!rst) begin
+            if(issue_valid) begin
+                RS[best].valid <= 1'b0;
+            end
+        end
+    end
+
+
+    always_comb begin
+        if(best != invalid_index)begin
+            issue_instruction = RS[best];
+            issue_valid       = 1'b1;
+            issue_free        = 0;
+            issue_free_valid  = 1'b1;
+            issue_free        = best;
         end
         else begin
-            if(best != invalid_index)begin
-                issue_instruction <= RS[best];
-                issue_valid       <= 1'b1;
-                RS[best].valid    <= 1'b0;
-                issue_free        <= 0;
-                issue_free_valid  <= 1'b1;
-                issue_free        <= best;
-            end
-            else begin
-                //issue_instruction <= 'h0;
-                issue_valid       <= 1'b0;
-                issue_free_valid  <= 1'b0;
-                issue_free        <= best;
-                issue_free_valid  <= 1'b0;
-                issue_free        <= 'hx;
-            end
+            //issue_instruction <= 'h0;
+            issue_valid       = 1'b0;
+            issue_free_valid  = 1'b0;
+            issue_free        = best;
+            issue_free_valid  = 1'b0;
+            issue_free        = 'hx;
         end
-        
     end
     // Find the youngest ready instruction
 

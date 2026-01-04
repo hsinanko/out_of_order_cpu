@@ -7,6 +7,7 @@ import typedef_pkg::*;
 module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 6)(
     input  logic       clk,
     input  logic       rst,
+    input  logic       flush,
     // rename/dispatch
     input  [1:0] dispatch_valid,
     input  ROB_ENTRY_t           dispatch_rob_0,         // entry to be added
@@ -22,10 +23,14 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     input  logic [ROB_WIDTH-1:0] commit_ls_rob_id,
     input  logic                 commit_branch_valid,
     input  logic [ROB_WIDTH-1:0] commit_branch_rob_id,
+    input  logic                 commit_mispredict,
+    input  logic [ADDR_WIDTH-1:0] commit_actual_target, // actual target address for branch instructions
     // outputs to backend/architectural state 
+    output logic                 isFlush,
+    output logic [4:0]           targetPC,
     output logic [4:0]           rd_arch_commit,
-    output logic [PHY_WIDTH-1:0]  rd_phy_old_commit,
-    output logic [PHY_WIDTH-1:0]  rd_phy_new_commit,
+    output logic [PHY_WIDTH-1:0] rd_phy_old_commit,
+    output logic [PHY_WIDTH-1:0] rd_phy_new_commit,
     output logic                 retire_valid,
     output logic                 store_valid // retire store valid
 );
@@ -39,22 +44,23 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
 
     assign rob_id_0 = (dispatch_valid[0]) ? tail : 4'd0;
     assign rob_id_1 = (dispatch_valid[1]) ? ((dispatch_valid[0]) ? tail + 4'd1 : tail) : 4'd0;
-
+    integer i;
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
-            integer i;
             for(i = 0; i < NUM_ROB_ENTRY; i = i + 1)begin
-                ROB[i].rd_arch       <= 'h0;
-                ROB[i].rd_phy_old    <= 'h0;
-                ROB[i].rd_phy_new    <= 'h0;
-                ROB[i].opcode        <= 'h0;
-                ROB[i].pred_target   <= 'h0;
-                ROB[i].pred_taken    <= 1'b0;
-                ROB[i].actual_target <= 'h0;
-                ROB[i].actual_taken  <= 1'b0;
+                ROB[i].rd_arch        <= 'h0;
+                ROB[i].rd_phy_old     <= 'h0;
+                ROB[i].rd_phy_new     <= 'h0;
+                ROB[i].opcode         <= 'h0;
+                ROB[i].mispredict     <= 1'b0;
+                ROB[i].actual_target  <= 'h0;
             end
             count <= 0;
             tail  <= 0;
+        end
+        else if(flush)begin
+            tail  <= 0;
+            count <= 0;
         end
         else if(dispatch_valid == 2'b11)begin
             ROB[tail] <= dispatch_rob_0;
@@ -80,7 +86,10 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
 
     always_ff @(posedge clk or posedge rst) begin
         if(rst)begin
-            ROB_FINISH = 'b0;
+            ROB_FINISH <= 'b0;
+        end
+        else if(flush) begin
+            ROB_FINISH <= 'b0;
         end
         else begin
             if(commit_alu_valid) begin
@@ -90,7 +99,9 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
                 ROB_FINISH[commit_ls_rob_id] <= 1'b1;
             end
             if(commit_branch_valid) begin
-                ROB_FINISH[commit_branch_rob_id] <= 1'b1;
+                ROB_FINISH[commit_branch_rob_id]        <= 1'b1;
+                ROB[commit_branch_rob_id].mispredict    <= commit_mispredict;
+                ROB[commit_branch_rob_id].actual_target <= commit_actual_target; // to be used for updating PC on mispredict
             end
             
         end
@@ -107,64 +118,83 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
             head <= 0;
-            rd_arch_commit    <= 'h0;
-            rd_phy_old_commit <= 'h0;
-            rd_phy_new_commit <= 'h0;
-            retire_valid      <= 1'b0;
-            store_valid       <= 1'b0;
+        end
+        else if(flush) begin
+            head <= 0;
+        end
+        else if(ROB_FINISH[head]) begin
+            ROB_FINISH[head] <= 1'b0;
+            head <= head + 1;
+        end
+        else begin 
+            head <= head;
+        end
+    end
+
+    always_ff @(posedge clk or posedge rst) begin
+        if(rst)begin
+            isFlush <= 1'b0;
+        end
+        else if(flush) begin
+            isFlush <= 1'b0;
         end
         else begin
-            if(ROB_FINISH[head]) begin
-                ROB_FINISH[head] <= 1'b0;
-                if(isALU) begin
-                    head              <= head + 1;
-                    rd_arch_commit    <= ROB[head].rd_arch;
-                    rd_phy_old_commit <= ROB[head].rd_phy_old;
-                    rd_phy_new_commit <= ROB[head].rd_phy_new;
-                    retire_valid      <= 1'b1;
-                end
-                else if(isLoad) begin
-                    head              <= head + 1;
-                    rd_arch_commit    <= ROB[head].rd_arch;
-                    rd_phy_old_commit <= ROB[head].rd_phy_old;
-                    rd_phy_new_commit <= ROB[head].rd_phy_new;
-                    retire_valid      <= 1'b1;
-                end
-                else if(isStore) begin
-                    head              <= head + 1;
-                    rd_arch_commit    <= ROB[head].rd_arch;
-                    rd_phy_old_commit <= ROB[head].rd_phy_old;
-                    rd_phy_new_commit <= ROB[head].rd_phy_new;
-                    retire_valid      <= 1'b0;
-                    store_valid       <= 1'b1;
-                end
-                else if(isBranch) begin
-                    head              <= head + 1;
-                    rd_arch_commit    <= ROB[head].rd_arch;
-                    rd_phy_old_commit <= ROB[head].rd_phy_old;
-                    rd_phy_new_commit <= ROB[head].rd_phy_new;
-                    retire_valid      <= 1'b1;
-                    store_valid       <= 1'b0;
-                end
-                else begin
-                    head              <= head + 1;
-                    rd_arch_commit    <= 'h0;
-                    rd_phy_old_commit <= 'h0;
-                    rd_phy_new_commit <= 'h0;
-                    retire_valid      <= 1'b0;
-                    store_valid       <= 1'b0;
-                end
+            if(ROB_FINISH[head] && isBranch) begin
+                isFlush  <= ROB[head].mispredict;
+                targetPC <= ROB[head].actual_target;
             end
             else begin
-                head              <= head;
-                rd_arch_commit    <= 'h0;
-                rd_phy_old_commit <= 'h0;
-                rd_phy_new_commit <= 'h0;
-                retire_valid      <= 1'b0;
-                store_valid       <= 1'b0;
+                isFlush <= 1'b0;
             end
         end
     end
+
+    always_comb begin
+        if(ROB_FINISH[head]) begin
+            if(isALU) begin
+                rd_arch_commit    = ROB[head].rd_arch;
+                rd_phy_old_commit = ROB[head].rd_phy_old;
+                rd_phy_new_commit = ROB[head].rd_phy_new;
+                retire_valid      = 1'b1;
+                store_valid       = 1'b0;
+            end
+            else if(isLoad) begin
+                rd_arch_commit    = ROB[head].rd_arch;
+                rd_phy_old_commit = ROB[head].rd_phy_old;
+                rd_phy_new_commit = ROB[head].rd_phy_new;
+                retire_valid      = 1'b1;
+                store_valid       = 1'b0;
+            end
+            else if(isStore) begin
+                rd_arch_commit    = ROB[head].rd_arch;
+                rd_phy_old_commit = ROB[head].rd_phy_old;
+                rd_phy_new_commit = ROB[head].rd_phy_new;
+                retire_valid      = 1'b0;
+                store_valid       = 1'b1;
+            end
+            else if(isBranch) begin
+                rd_arch_commit    = ROB[head].rd_arch;
+                rd_phy_old_commit = ROB[head].rd_phy_old;
+                rd_phy_new_commit = ROB[head].rd_phy_new;
+                retire_valid      = 1'b1;
+                store_valid       = 1'b0;
+            end
+            else begin
+                rd_arch_commit    = 'h0;
+                rd_phy_old_commit = 'h0;
+                rd_phy_new_commit = 'h0;
+                retire_valid      = 1'b0;
+                store_valid       = 1'b0;
+            end
+        end
+            else begin 
+                rd_arch_commit    = 'h0;
+                rd_phy_old_commit = 'h0;
+                rd_phy_new_commit = 'h0;
+                retire_valid      = 1'b0;
+                store_valid       = 1'b0;
+            end
+        end
     
 
     // For debugging: dump ROB contents at each clock cycle
