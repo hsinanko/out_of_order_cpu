@@ -41,7 +41,7 @@ module IssueExecution_tb();
         if(rst) begin
             n_cycles <= 0;
         end
-        else if(n_cycles < 30)begin
+        else if(n_cycles < 50)begin
             n_cycles <= n_cycles + 1;
         end
         else begin
