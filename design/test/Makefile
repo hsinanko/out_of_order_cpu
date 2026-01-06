@@ -6,6 +6,7 @@ PKG = \
 		../src/package/typedef_pkg.sv \
 		../src/package/register_pkg.sv \
 		../src/package/instruction_pkg.sv \
+		../src/package/info_pkg.sv \
 		../src/package/debug_pkg.sv
 COM = \
 		../src/common/Front_RAT.sv\

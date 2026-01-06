@@ -110,9 +110,6 @@ package debug_pkg;
                     default: opcode_name = "BRANCH_UNKNOWN";
                 endcase
             end
-            'b0001111: begin
-                opcode_name = "MISC_MEM";
-            end
             'b1110011: begin
                 opcode_name = "SYSTEM";
             end

@@ -3,7 +3,7 @@
 import parameter_pkg::*;
 import typedef_pkg::*;
 import instruction_pkg::*;
-
+import info_pkg::*;
 
 module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY_REGS = 64, PHY_WIDTH = 6, ROB_WIDTH = 5, NUM_RS_ENTRIES = 8)(
     input logic clk,
@@ -781,17 +781,6 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     );
 
 
-    logic [31:0] retire_count;
-    always_ff @(posedge clk or posedge rst)begin
-        if(!rst) begin
-            if(!flush)begin
-                if(retire_pr_valid || retire_store_valid || retire_branch_valid) begin
-                    retire_count <= retire_count + 1;
-                end
-            end
-        end
-    end
-
     // ============= Debug Tasks ==================
 
     always_ff @(posedge clk) begin
@@ -803,127 +792,18 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         else begin
             // print debug information at each stage
             $display("*************************** Cycle %0d *************************", $time/10);
-            // print_Fetch();
-            // print_Rename();
-            // print_Execution();
-            print_Commit();
+            print_Fetch(instruction_valid_reg, instruction_addr_0_reg, instruction_0_reg, instruction_addr_1_reg, instruction_1_reg);
+            print_Rename(instruction_valid_reg, instruction_addr_0_reg, instruction_0_reg, instruction_addr_1_reg, instruction_1_reg,
+                         issue_alu_valid_reg, issue_instruction_alu_reg,
+                         issue_ls_valid_reg, issue_instruction_ls_reg,
+                         issue_branch_valid_reg, issue_instruction_branch_reg);
+            print_Execution(alu_valid, ls_valid, branch_valid,
+                            alu_rob_id, alu_output,
+                            ls_rob_id, wdata_valid, waddr, wdata, rd_phy_ls, mem_rdata,
+                            branch_rob_id, nextPC);
+            print_Commit(retire_pr_valid_reg, retire_store_valid_reg, retire_branch_valid_reg,
+                         rd_arch_commit_reg, rd_phy_old_commit_reg, rd_phy_new_commit_reg);
             $display("**************************** END *****************************\n");
         end
     end
-
-    task print_Fetch();
-        $display("\t===============================================");
-        $display("\t----------- Instruction Fetch Stage -----------");
-        $display("\t===============================================");
-        if(instruction_valid == 2'b00) begin
-            $display("\t\tNo valid instructions fetched.");
-        end
-        else begin
-            $display("\t\tFetched  %2d valid instructions.", instruction_valid-1);
-            if(instruction_valid[0])begin
-                $display("\tInstruction 0: PC = 0x%h, 0x%h", instruction_addr_0, instruction_0);
-            end
-
-            if(instruction_valid[1]) begin
-                $display("\tInstruction 1: PC = 0x%h, 0x%h", instruction_addr_1, instruction_1);
-            end
-        end
-    endtask : print_Fetch
-
-
-    task print_Rename();
-        $display("\n\t===============================================");
-        $display("\t------- Decode - Rename, Dispatch Stage -------");
-        $display("\t===============================================");
-        if(instruction_valid_reg == 2'b00) begin
-            $display("\t\tNo valid instructions renamed.");
-        end
-        else begin
-            $display("\t\tRenamed %2d valid instructions.", instruction_valid_reg-1);
-            if(instruction_valid_reg[0])begin
-                $display("\tInstruction 0: PC = 0x%h, 0x%h", instruction_addr_0_reg, instruction_0_reg);
-            end
-
-            if(instruction_valid_reg[1]) begin
-                $display("\tInstruction 1: PC = 0x%h, 0x%h", instruction_addr_1_reg, instruction_1_reg);
-            end
-            $display("\t\tDispatch to Reservation Station .....");
-            if(issue_alu_valid_reg | issue_ls_valid_reg | issue_branch_valid_reg) begin
-                $display("\t\tIssued Instructions");
-                if(issue_alu_valid_reg) begin
-                    $display("\tALU Instruction: PC=0x%h, ROB_ID=%0d", issue_instruction_alu_reg.addr, issue_instruction_alu_reg.rob_id);
-                end
-                if(issue_ls_valid_reg) begin
-                    if(issue_instruction_ls_reg.opcode == LOAD)
-                        $display("\tLoad Instruction: PC=0x%h, ROB_ID=%0d", issue_instruction_ls_reg.addr, issue_instruction_ls_reg.rob_id);
-                    else
-                        $display("\tStore Instruction: PC=0x%h, ROB_ID=%0d", issue_instruction_ls_reg.addr, issue_instruction_ls_reg.rob_id);
-                end
-                if(issue_branch_valid_reg) begin
-                    $display("\tBranch Instruction: PC=0x%h, ROB_ID=%0d", issue_instruction_branch_reg.addr, issue_instruction_branch_reg.rob_id);
-                end
-            end
-            else begin
-                $display("\t\tNo valid instructions issued.");
-            end
-
-        end
-    endtask : print_Rename
-
-    task print_Execution();
-        $display("\n\t===============================================");
-        $display("\t----------- Issue / Execution Stage -----------");
-        $display("\t===============================================");
-        // Add execution stage debug information here
-        if(!alu_valid && !ls_valid && !branch_valid) begin
-            $display("\t\tNo valid instructions executed.");
-        end
-        else begin
-            if(alu_valid) begin
-                $display("\tALU Result: ROB_ID=%0d, Result=%h", alu_rob_id, alu_output);
-            end
-            if(ls_valid) begin
-                if(wdata_valid)
-                    $display("\tStore Data: ROB_ID=%0d, Addr=%h, Data=%h", ls_rob_id, waddr, wdata);
-                else
-                    $display("\tLoad Data: ROB_ID=%0d, rd_phy=%h, Data=%h", ls_rob_id, rd_phy_ls, mem_rdata);
-            end
-            if(branch_valid) begin
-                $display("\tBranch Execution: ROB_ID=%0d, NextPC=%h", branch_rob_id, nextPC);
-            end
-        end
-
-    endtask : print_Execution
-
-
-    task print_Commit();
-        $display("\n\t===============================================");
-        $display("\t---------------- Commit Stage -----------------");
-        $display("\t===============================================");
-
-        if(!retire_pr_valid_reg && !retire_store_valid_reg && !retire_branch_valid_reg) begin
-            $display("\t\tNo valid instructions committed.");
-        end
-        else begin
-            if(retire_pr_valid_reg || retire_store_valid_reg || retire_branch_valid_reg)
-                $display("commiter instrutions: %0d", retire_count);
-            //$display("\tCommitted Instruction: RD_ARCH=%0d, RD_PHY=%0d", rd_arch_commit_reg, rd_phy_commit_reg);
-        end
-    endtask : print_Commit
-
-
-    // task print_Freelist();
-    //     $display("\n\t===============================================");
-    //     $display("\t----------------- Free List -------------------");
-    //     $display("\t===============================================");
-
-    //     // Add freelist debug information here
-    //     $display("\tFree List Contents:");
-    //     for (i = 0; i < PHY_REGS; i = i + 1) begin
-    //         if (!PRF_valid[i]) begin
-    //             $display("\tFree Register: %0d", i);
-    //         end
-    //     end
-    // endtask : print_Freelist
-
 endmodule
