@@ -49,7 +49,7 @@ module Issue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, ROB_WI
     output logic wdata_valid,
     // Branch outputs
     output logic [ROB_WIDTH-1:0]branch_rob_id,
-    output logic isbranchTaken,
+    output logic actual_taken,
     output logic mispredict,
     output logic [ADDR_WIDTH-1:0] jumpPC,
     output logic [ADDR_WIDTH-1:0] update_pc,
@@ -117,9 +117,9 @@ module Issue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, ROB_WI
         .wdata_valid(wdata_valid),
         // Branch outputs
         .branch_rob_id(branch_rob_id),
-        .isbranchTaken(isbranchTaken),
+        .actual_taken(actual_taken),
         .mispredict(mispredict),
-        .jump_address(jumpPC),
+        .actual_target(jumpPC),
         .update_pc(update_pc),
         .rd_phy_branch(rd_phy_branch),
         .isJump(isJump)

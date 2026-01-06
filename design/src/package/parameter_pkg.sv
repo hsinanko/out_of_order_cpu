@@ -2,7 +2,7 @@ package parameter_pkg;
 
     parameter ADDR_WIDTH = 32;
     parameter DATA_WIDTH = 32;
-    parameter NUM_ROB_ENTRY = 16;
+    parameter NUM_ROB_ENTRY = 32;
     parameter REG_WIDTH = 32;
     parameter ARCH_REGS = 32;
     parameter NUM_RS_ENTRIES = 16;
@@ -14,6 +14,6 @@ package parameter_pkg;
     parameter PHY_WIDTH = $clog2(PHY_REGS);
     parameter ROB_WIDTH = $clog2(NUM_ROB_ENTRY);
     parameter RS_WIDTH = $clog2(NUM_RS_ENTRIES);
-    
+    parameter FREE_REG = PHY_REGS - ARCH_REGS; // number of free physical registers
 
 endpackage

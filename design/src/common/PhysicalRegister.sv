@@ -34,17 +34,18 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
     input  logic branch_valid,
     // =========== writeback interface =================
     // alu commit interface
-    input  logic alu_wb_en,                      // commit enable signal
-    input  logic [PHY_WIDTH-1:0]rd_alu_wb,                 // physical register address to commit
-    input  logic [REG_WIDTH-1:0] alu_result,     // data to writ
+    input  logic commit_alu_valid,                     // commit enable signal
+    input  logic [PHY_WIDTH-1:0]commit_rd_alu,                 // physical register address to commit
+    input  logic [REG_WIDTH-1:0]commit_alu_result,     // data to writ
     // load/store commit interface
-    input  logic ls_wb_en,                       // commit enable signal
-    input  logic [PHY_WIDTH-1:0]rd_ls_wb,                  // physical register address to commit
-    input  logic [REG_WIDTH-1:0] memory_output, // data to write
+    input  logic commit_ls_valid,                       // commit enable signal
+    input  logic [PHY_WIDTH-1:0]commit_rd_ls,                  // physical register address to commit
+    input  logic [REG_WIDTH-1:0]commit_mem_output, // data to write
     // branch commit interface
-    input  logic branch_wb_en,                   // commit enable signal
-    input  logic [PHY_WIDTH-1:0]rd_branch_wb,              // physical register address to commit
-    input  logic [REG_WIDTH-1:0] nextPC, // data to write
+    input  logic commit_jump_valid,                   // commit enable 
+    input  logic commit_branch_valid,
+    input  logic [PHY_WIDTH-1:0]commit_rd_branch,              // physical register address to commit
+    input  logic [REG_WIDTH-1:0]commit_nextPC, // data to write
     // ============= commit /retire interface ====================
     input logic [PHY_WIDTH-1:0]rd_phy_old_commit,
     input logic [PHY_WIDTH-1:0]rd_phy_new_commit,
@@ -55,7 +56,16 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
     integer i;
     logic [DATA_WIDTH-1:0] PRF [0:PHY_REGS-1];
 
-    // ========== Decode/Rename stage (read data from PRF) =========
+    
+    genvar j;
+
+    generate
+        for(j = 0; j < PHY_REGS; j = j + 1) begin : gen_prf_data
+            // continuous assignment for each register for waveform visibility
+            logic [DATA_WIDTH-1:0] prf_data;
+            assign prf_data = PRF[j];
+        end
+    endgenerate
 
 
     // ========== execution stage (read data from PRF) =========
@@ -76,12 +86,11 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
                 PRF[i] <= 'h0;
             end
             PRF_busy  <= 'h0;
-            PRF_valid <= {PHY_REGS{1'b1}};
+            PRF_valid <= {ARCH_REGS{1'b1}};
         end
         else if(flush) begin
             // On flush, reset PRF busy and valid bits
             PRF_busy  <= 'h0;
-            PRF_valid <= {PHY_REGS{1'b1}};
         end
         else begin
 
@@ -94,19 +103,21 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
                 PRF_valid[rd_phy_busy_1] <= 0;
             end
 
-            if(alu_wb_en)begin
-                PRF[rd_alu_wb]       <= alu_result;
-                PRF_valid[rd_alu_wb] <= 1;
+            if(commit_alu_valid)begin
+                PRF[commit_rd_alu]       <= commit_alu_result;
+                PRF_valid[commit_rd_alu] <= 1;
             end
-            if(ls_wb_en)begin
-                PRF[rd_ls_wb]       <= memory_output;
-                PRF_valid[rd_ls_wb] <= 1;
+            if(commit_ls_valid)begin
+                PRF[commit_rd_ls]       <= commit_mem_output;
+                PRF_valid[commit_rd_ls] <= 1;
             end
-            if(branch_wb_en)begin
-                PRF[rd_branch_wb]       <= nextPC;
-                PRF_valid[rd_branch_wb] <= 1;
+            if(commit_jump_valid)begin
+                PRF[commit_rd_branch]       <= commit_nextPC;
+                PRF_valid[commit_rd_branch] <= 1;
             end
-
+            if(commit_branch_valid)begin
+                PRF_valid[commit_rd_branch] <= 1;
+            end
             if(retire_valid) begin
                 if(!PRF_busy[rd_phy_old_commit])begin
                     PRF_valid[rd_phy_old_commit] <= 0;
@@ -123,7 +134,7 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
     // For debugging: display PRF contents
     integer           mcd;
     always_ff @(negedge clk) begin
-        mcd = $fopen("./build/PhysicalRegister.txt","w");
+        mcd = $fopen("../test/build/PhysicalRegister.txt","w");
         $fdisplay(mcd,"Physical Register File Contents:");
         $fdisplay(mcd,"Index |    Data    | Busy | Valid");
         for (i = 0; i < PHY_REGS; i = i + 1) begin

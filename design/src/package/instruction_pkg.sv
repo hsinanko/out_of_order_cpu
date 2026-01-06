@@ -57,7 +57,6 @@ package instruction_pkg;
        JAL      = 'b1101111,
        JALR     = 'b1100111,
        BRANCH   = 'b1100011,
-       MISC_MEM = 'b0001111,
        SYSTEM   = 'b1110011
     } OPCODE;
     

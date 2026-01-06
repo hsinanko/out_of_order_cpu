@@ -10,15 +10,16 @@ module IssueExecution_tb();
     logic clk;
     logic rst;
 
-    logic [ADDR_WIDTH-1:0] start_addr;
+    logic [ADDR_WIDTH-1:0] boot_pc;
 
-
+    logic done;
     always #5 clk = ~clk; // Clock generation
 
     O3O_CPU #(ADDR_WIDTH, DATA_WIDTH, REG_WIDTH, PHY_REGS, PHY_WIDTH, ROB_WIDTH, NUM_RS_ENTRIES) dut_cpu (
         .clk(clk),
         .rst(rst),
-        .start_addr(0)
+        .boot_pc(boot_pc),
+        .done(done)
     );
 
     initial begin
@@ -30,6 +31,7 @@ module IssueExecution_tb();
         // Testbench initialization and stimulus code
         clk = 0;
         rst = 1;
+        boot_pc = 0;
         $display("\n\t=========== Simulation started ===========\n");
 
         #10; rst = 0;
@@ -41,7 +43,7 @@ module IssueExecution_tb();
         if(rst) begin
             n_cycles <= 0;
         end
-        else if(n_cycles < 50)begin
+        else if(!done)begin
             n_cycles <= n_cycles + 1;
         end
         else begin

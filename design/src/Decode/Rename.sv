@@ -87,16 +87,33 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
     assign rs2_arch_1 = instr_1.rs2_addr;
     assign rd_arch_1  = instr_1.rd_addr;
 
-    assign instr_valid = instruction_valid;
 
+    always_comb begin
+        case(instr_0.opcode)
+            STORE: instr_valid[0] = 1'b0;
+            BRANCH: instr_valid[0] = 1'b0;
+            default: instr_valid[0] = instruction_valid[0];
+        endcase
+
+        case(instr_1.opcode)
+            STORE: instr_valid[1] = 1'b0;
+            BRANCH: instr_valid[1] = 1'b0;
+            default: instr_valid[1] = instruction_valid[1];
+        endcase
+    end
+
+
+    logic isRename_0, isRename_1;
+    assign isRename_0 = (instr_0.opcode != STORE && instr_0.opcode != BRANCH || instr_0.opcode != SYSTEM) && (rd_arch_0 != 5'd0);
+    assign isRename_1 = (instr_1.opcode != STORE && instr_1.opcode != BRANCH || instr_1.opcode != SYSTEM) && (rd_arch_1 != 5'd0);
     //=========== Freelist =================
-    assign free_list_valid[0] = (!flush && instruction_valid[0] && (rd_arch_0 != 5'd0) && (instr_0.opcode != STORE));
-    assign free_list_valid[1] = (!flush && instruction_valid[1] && (rd_arch_1 != 5'd0) && (instr_1.opcode != STORE));
+    assign free_list_valid[0] = (!flush && instruction_valid[0] && isRename_0);
+    assign free_list_valid[1] = (!flush && instruction_valid[1] && isRename_1);
 
     //=========== Physical Register File =================
     // Physical Register File outputs
-    assign busy_valid[0] = (!flush && instruction_valid[0] && (rd_arch_0 != 5'd0) && (instr_0.opcode != STORE));
-    assign busy_valid[1] = (!flush && instruction_valid[1] && (rd_arch_1 != 5'd0) && (instr_1.opcode != STORE));
+    assign busy_valid[0] = (!flush && instruction_valid[0] && isRename_0);
+    assign busy_valid[1] = (!flush && instruction_valid[1] && isRename_1);
     assign rd_phy_busy_0 = (busy_valid[0]) ? rd_phy_new_0 : 'h0;
     assign rd_phy_busy_1 = (busy_valid[1]) ? rd_phy_new_1 : 'h0;
 
@@ -110,6 +127,8 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
     assign dispatch_rob_0.rd_phy_new = rd_phy_new_0;
     assign dispatch_rob_0.opcode     = instr_0.opcode;
     assign dispatch_rob_0.actual_target = 'h0; // to be updated at commit stage
+    assign dispatch_rob_0.actual_taken = 1'b0;
+    assign dispatch_rob_0.update_pc    = 'h0;
     assign dispatch_rob_0.mispredict = 1'b0;
     //========== Second instruction =================
     assign dispatch_rob_1.rd_arch    = rd_arch_1;
@@ -117,6 +136,8 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
     assign dispatch_rob_1.rd_phy_new = rd_phy_new_1;
     assign dispatch_rob_1.opcode     = instr_1.opcode;
     assign dispatch_rob_1.actual_target = 'h0; // to be updated at commit stage
+    assign dispatch_rob_1.actual_taken = 1'b0;
+    assign dispatch_rob_1.update_pc    = 'h0;
     assign dispatch_rob_1.mispredict = 1'b0;
 
 

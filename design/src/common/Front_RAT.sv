@@ -30,32 +30,55 @@ module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     logic [PHY_WIDTH-1:0] FRONT_RAT [0:ARCH_REGS-1];
     logic [PHY_WIDTH-1:0] rat_tmp [0:ARCH_REGS-1];
     integer i;
-    always_comb begin
 
-        // start from current RAT
-        for (i = 0; i < ARCH_REGS; i++)
-            rat_tmp[i] = FRONT_RAT[i];
-        // -------- Slot 0 rename --------
+    logic [PHY_WIDTH-1:0] front_rat [0:ARCH_REGS-1];
+    // genvar j;
+    // generate
+    //     for(j = 0; j < ARCH_REGS; j = j + 1) begin : gen_front_rat
+    //         // continuous assignment for each slice of the packed output
+    //         //assign front_rat[j*PHY_WIDTH +: PHY_WIDTH] = FRONT_RAT[j];
+    //         assign front_rat[j] = FRONT_RAT[j];
+    //     end
+    // endgenerate
+    // always_comb begin
 
-        rs1_phy_0 = rat_tmp[rs1_arch_0];
-        rs2_phy_0 = rat_tmp[rs2_arch_0];
-        rd_phy_0  = rat_tmp[rd_arch_0];
+    //     // start from current RAT
+    //     for (i = 0; i < ARCH_REGS; i++)
+    //         rat_tmp[i] = FRONT_RAT[i];
+    //     // -------- Slot 0 rename --------
 
-        if (instr_valid[0]) begin
-            rat_tmp[rd_arch_0] = rd_phy_new_0;
-        end
+    //     rs1_phy_0 = FRONT_RAT[rs1_arch_0];
+    //     rs2_phy_0 = FRONT_RAT[rs2_arch_0];
 
-        // -------- Slot 1 rename --------
+    //     if (instr_valid[0]) begin
+    //         rat_tmp[rd_arch_0] = rd_phy_new_0;
+    //         rd_phy_0  = rat_tmp[rd_arch_0];
+    //     end
 
-        rs1_phy_1 = rat_tmp[rs1_arch_1];
-        rs2_phy_1 = rat_tmp[rs2_arch_1];
-        rd_phy_1  = rat_tmp[rd_arch_1];
+    //     // -------- Slot 1 rename --------
 
-        if (instr_valid[1]) begin
-            rat_tmp[rd_arch_1] = rd_phy_new_1;
-        end
+    //     rs1_phy_1 = (instr_valid[0] && rd_arch_0 == rs1_arch_1) ? rat_tmp[rs1_arch_1] : FRONT_RAT[rs1_arch_1];
+    //     rs2_phy_1 = (instr_valid[0] && rd_arch_0 == rs2_arch_1) ? rat_tmp[rs2_arch_1] : FRONT_RAT[rs2_arch_1];
+        
 
+    //     if (instr_valid[1]) begin
+    //         rat_tmp[rd_arch_1] = rd_phy_new_1;
+    //         rd_phy_1  = rat_tmp[rd_arch_1];
+    //     end
+
+    // end
+
+    always_latch begin
+        rs1_phy_0 = FRONT_RAT[rs1_arch_0];
+        rs2_phy_0 = FRONT_RAT[rs2_arch_0];
+        rd_phy_0  = FRONT_RAT[rd_arch_0];
+        rs1_phy_1 = (instr_valid[0] && rs1_arch_1 == rd_arch_0) ? rd_phy_new_0 : FRONT_RAT[rs1_arch_1];
+        rs2_phy_1 = (instr_valid[0] && rs2_arch_1 == rd_arch_0) ? rd_phy_new_0 : FRONT_RAT[rs2_arch_1];
+        rd_phy_1  = (instr_valid[0] && rd_arch_1 == rd_arch_0)  ? rd_phy_new_0 : FRONT_RAT[rd_arch_1];
     end
+
+
+
 
 
     always_ff @(posedge clk or posedge rst) begin
@@ -71,8 +94,17 @@ module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
             end
         end
         else begin
-            FRONT_RAT <= rat_tmp;
+            // Update RAT for first instruction
+            if (instr_valid[0]) begin
+                FRONT_RAT[rd_arch_0] <= rd_phy_new_0;
+            end
+            // Update RAT for second instruction
+            if (instr_valid[1]) begin
+                FRONT_RAT[rd_arch_1] <= rd_phy_new_1;
+            end
         end
+
+
     end
 
 
@@ -85,7 +117,7 @@ module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     integer           mcd;
 
     always_ff @(negedge clk) begin
-        mcd = $fopen("./build/Front_RAT.txt","w");
+        mcd = $fopen("../test/build/Front_RAT.txt","w");
 
         for (i=0; i< ARCH_REGS; i=i+1) begin
             $fdisplay(mcd,"%2d %3d", i, FRONT_RAT[i]);

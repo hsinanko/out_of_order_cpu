@@ -17,22 +17,30 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     output logic [ROB_WIDTH-1:0] rob_id_1,
 
     // commit 
-    input  logic                 commit_alu_valid,
-    input  logic [ROB_WIDTH-1:0] commit_alu_rob_id,
-    input  logic                 commit_ls_valid,
-    input  logic [ROB_WIDTH-1:0] commit_ls_rob_id,
-    input  logic                 commit_branch_valid,
-    input  logic [ROB_WIDTH-1:0] commit_branch_rob_id,
-    input  logic                 commit_mispredict,
+    input  logic                  commit_alu_valid,
+    input  logic [ROB_WIDTH-1:0]  commit_alu_rob_id,
+    input  logic                  commit_ls_valid,
+    input  logic [ROB_WIDTH-1:0]  commit_ls_rob_id,
+    input  logic                  commit_branch_valid,
+    input  logic [ROB_WIDTH-1:0]  commit_branch_rob_id,
+    input  logic                  commit_mispredict,
     input  logic [ADDR_WIDTH-1:0] commit_actual_target, // actual target address for branch instructions
+    input  logic                  commit_actual_taken,
+    input  logic [ADDR_WIDTH-1:0] commit_update_pc,
     // outputs to backend/architectural state 
     output logic                 isFlush,
     output logic [4:0]           targetPC,
     output logic [4:0]           rd_arch_commit,
     output logic [PHY_WIDTH-1:0] rd_phy_old_commit,
     output logic [PHY_WIDTH-1:0] rd_phy_new_commit,
-    output logic                 retire_valid,
-    output logic                 store_valid // retire store valid
+    output logic [ADDR_WIDTH-1:0] update_btb_pc,
+    output logic                  update_btb_taken,
+    output logic [ADDR_WIDTH-1:0] update_btb_target,
+    output logic                 retire_pr_valid,
+    output logic                 retire_store_valid, // retire store valid
+    output logic                 retire_branch_valid,
+    output logic                 retire_done_valid,
+    output logic [ROB_WIDTH-1:0] rob_debug
 );
 
     ROB_ENTRY_t ROB [NUM_ROB_ENTRY-1:0]; // FIFO
@@ -54,6 +62,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
                 ROB[i].opcode         <= 'h0;
                 ROB[i].mispredict     <= 1'b0;
                 ROB[i].actual_target  <= 'h0;
+                ROB[i].actual_taken   <= 1'b0;
             end
             count <= 0;
             tail  <= 0;
@@ -102,6 +111,8 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
                 ROB_FINISH[commit_branch_rob_id]        <= 1'b1;
                 ROB[commit_branch_rob_id].mispredict    <= commit_mispredict;
                 ROB[commit_branch_rob_id].actual_target <= commit_actual_target; // to be used for updating PC on mispredict
+                ROB[commit_branch_rob_id].actual_taken  <= commit_actual_taken;
+                ROB[commit_branch_rob_id].update_pc     <= commit_update_pc;
             end
             
         end
@@ -110,11 +121,12 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     // commit / retire logic
 
     logic isALU, isLoad, isStore, isBranch;
-    assign isALU = (ROB[head].opcode == OP_IMM || ROB[head].opcode == OP || ROB[head].opcode == LUI || ROB[head].opcode == AUIPC || ROB[head].opcode == SYSTEM);
+    assign isALU = (ROB[head].opcode == OP_IMM || ROB[head].opcode == OP || ROB[head].opcode == LUI || ROB[head].opcode == AUIPC);
     assign isLoad = (ROB[head].opcode == LOAD);
     assign isStore = (ROB[head].opcode == STORE);
-    assign isBranch = (ROB[head].opcode == BRANCH || ROB[head].opcode == JAL || ROB[head].opcode == JALR);
-
+    assign isBranch = (ROB[head].opcode == BRANCH);
+    assign isJump = (ROB[head].opcode == JAL || ROB[head].opcode == JALR);
+    assign isSystem = (ROB[head].opcode == SYSTEM);
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
             head <= 0;
@@ -150,51 +162,105 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     end
 
     always_comb begin
-        if(ROB_FINISH[head]) begin
+        if(flush)begin
+            rd_arch_commit      = 'h0;
+            rd_phy_old_commit   = 'h0;
+            rd_phy_new_commit   = 'h0;
+            update_btb_pc       = 'h0;
+            update_btb_taken    = 1'b0;
+            update_btb_target   = 'h0;
+            retire_pr_valid     = 1'b0;
+            retire_store_valid  = 1'b0;
+            retire_branch_valid = 1'b0;
+        end
+        else if(ROB_FINISH[head]) begin
+            rob_debug = head;
             if(isALU) begin
-                rd_arch_commit    = ROB[head].rd_arch;
-                rd_phy_old_commit = ROB[head].rd_phy_old;
-                rd_phy_new_commit = ROB[head].rd_phy_new;
-                retire_valid      = 1'b1;
-                store_valid       = 1'b0;
+                rd_arch_commit      = ROB[head].rd_arch;
+                rd_phy_old_commit   = ROB[head].rd_phy_old;
+                rd_phy_new_commit   = ROB[head].rd_phy_new;
+                update_btb_pc       = '0;
+                update_btb_taken    = '0;             
+                update_btb_target   = '0;
+                retire_pr_valid     = 1'b1;
+                retire_store_valid  = 1'b0;
+                retire_branch_valid = 1'b0;
+                retire_done_valid   = 1'b0;
             end
             else if(isLoad) begin
-                rd_arch_commit    = ROB[head].rd_arch;
-                rd_phy_old_commit = ROB[head].rd_phy_old;
-                rd_phy_new_commit = ROB[head].rd_phy_new;
-                retire_valid      = 1'b1;
-                store_valid       = 1'b0;
+                rd_arch_commit      = ROB[head].rd_arch;
+                rd_phy_old_commit   = ROB[head].rd_phy_old;
+                rd_phy_new_commit   = ROB[head].rd_phy_new;
+                update_btb_pc       = '0;
+                update_btb_taken    = '0;
+                update_btb_target   = '0;
+                retire_pr_valid     = 1'b1;
+                retire_store_valid  = 1'b0;
+                retire_branch_valid = 1'b0;
+                retire_done_valid   = 1'b0;
             end
             else if(isStore) begin
-                rd_arch_commit    = ROB[head].rd_arch;
-                rd_phy_old_commit = ROB[head].rd_phy_old;
-                rd_phy_new_commit = ROB[head].rd_phy_new;
-                retire_valid      = 1'b0;
-                store_valid       = 1'b1;
+                rd_arch_commit      = ROB[head].rd_arch;
+                rd_phy_old_commit   = ROB[head].rd_phy_old;
+                rd_phy_new_commit   = ROB[head].rd_phy_new;
+                update_btb_pc       = '0;
+                update_btb_taken    = '0;
+                update_btb_target   = '0;
+                retire_pr_valid     = 1'b0;
+                retire_store_valid  = 1'b1;
+                retire_branch_valid = 1'b0;
+                retire_done_valid   = 1'b0;
             end
             else if(isBranch) begin
-                rd_arch_commit    = ROB[head].rd_arch;
-                rd_phy_old_commit = ROB[head].rd_phy_old;
-                rd_phy_new_commit = ROB[head].rd_phy_new;
-                retire_valid      = 1'b1;
-                store_valid       = 1'b0;
+                rd_arch_commit      = 'h0;
+                rd_phy_old_commit   = 'h0;
+                rd_phy_new_commit   = 'h0;
+                update_btb_pc       = ROB[head].update_pc;
+                update_btb_taken    = ROB[head].actual_taken;
+                update_btb_target   = ROB[head].actual_target;
+                retire_pr_valid     = 1'b0;
+                retire_store_valid  = 1'b0;
+                retire_branch_valid = 1'b1;
+                retire_done_valid   = 1'b0;
+            end
+            else if(isJump)begin
+                rd_arch_commit      = ROB[head].rd_arch;
+                rd_phy_old_commit   = ROB[head].rd_phy_old;
+                rd_phy_new_commit   = ROB[head].rd_phy_new;
+                update_btb_pc       = ROB[head].update_pc;
+                update_btb_taken    = ROB[head].actual_taken;
+                update_btb_target   = ROB[head].actual_target;
+                retire_pr_valid     = 1'b1;
+                retire_store_valid  = 1'b0;
+                retire_branch_valid = 1'b1;
+                retire_done_valid   = 1'b0;
+            end
+            else if(isSystem)begin
+                rd_arch_commit      = 'h0;
+                rd_phy_old_commit   = 'h0;
+                rd_phy_new_commit   = 'h0;
+                update_btb_pc       = 'h0;
+                update_btb_taken    = 'b0;
+                update_btb_target   = 'h0;
+                retire_pr_valid     = 1'b0;
+                retire_store_valid  = 1'b0;
+                retire_branch_valid = 1'b0;
+                retire_done_valid   = 1'b1;
             end
             else begin
-                rd_arch_commit    = 'h0;
-                rd_phy_old_commit = 'h0;
-                rd_phy_new_commit = 'h0;
-                retire_valid      = 1'b0;
-                store_valid       = 1'b0;
+                rd_arch_commit      = 'h0;
+                rd_phy_old_commit   = 'h0;
+                rd_phy_new_commit   = 'h0;
+                update_btb_pc       = 'h0;
+                update_btb_taken    = 1'b0;
+                update_btb_target   = 'h0;
+                retire_pr_valid     = 1'b0;
+                retire_store_valid  = 1'b0;
+                retire_branch_valid = 1'b0;
+                retire_done_valid   = 1'b0;
             end
         end
-            else begin 
-                rd_arch_commit    = 'h0;
-                rd_phy_old_commit = 'h0;
-                rd_phy_new_commit = 'h0;
-                retire_valid      = 1'b0;
-                store_valid       = 1'b0;
-            end
-        end
+    end
     
 
     // For debugging: dump ROB contents at each clock cycle
@@ -202,7 +268,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     logic [ROB_WIDTH-1:0] j;
 
     always_ff @(negedge clk) begin
-        mcd = $fopen("./build/ROB.txt","w");
+        mcd = $fopen("../test/build/ROB.txt","w");
         $fdisplay(mcd,"----- ROB contents at time -----", $time);
         $fdisplay(mcd,"Index | rd_arch | rd_phy_old | rd_phy_new | Finished");
         $fdisplay(mcd,"-----------------------------------------");

@@ -43,10 +43,10 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     output logic wdata_valid,
     // Branch outputs
     output logic [ROB_WIDTH-1:0]branch_rob_id,
-    output logic isbranchTaken,
+    output logic actual_taken,
     output logic mispredict,
-    output logic [ADDR_WIDTH-1:0] jump_address,
-    output logic [PHY_WIDTH-1:0] update_pc,
+    output logic [ADDR_WIDTH-1:0] actual_target,
+    output logic [ADDR_WIDTH-1:0] update_pc,
     output logic [PHY_WIDTH-1:0]rd_phy_branch,
     output logic isJump
 );
@@ -122,6 +122,9 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     
     // ============== Branch Unit ==================
     
+    assign rs1_phy_branch = issue_instruction_branch.rs1_phy;
+    assign rs2_phy_branch = issue_instruction_branch.rs2_phy;
+
     assign branch_rob_id = issue_instruction_branch.rob_id;
     assign rd_phy_branch = issue_instruction_branch.rd_phy;
     assign branch_valid = issue_branch_valid;
@@ -135,8 +138,8 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
         .predict_taken(issue_instruction_branch.predict_taken),
         .predict_target(issue_instruction_branch.predict_target),
         .mispredict(mispredict),
-        .isbranchTaken(isbranchTaken),
-        .actual_target(jump_address),
+        .actual_taken(actual_taken),
+        .actual_target(actual_target),
         .update_pc(update_pc),
         .isJump(isJump)
     );

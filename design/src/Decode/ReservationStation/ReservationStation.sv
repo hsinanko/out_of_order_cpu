@@ -26,7 +26,7 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
 
     logic [$clog2(NUM_RS_ENTRIES)-1:0]head;
     logic [$clog2(NUM_RS_ENTRIES)-1:0]tail;
-    logic [$clog2(NUM_RS_ENTRIES)-1:0]num_free;
+    logic [$clog2(NUM_RS_ENTRIES):0]num_free;
     logic [4:0]global_age;
     logic issue_free_valid;
     logic [$clog2(NUM_RS_ENTRIES)-1:0]issue_free;
@@ -110,37 +110,46 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
     end
 
     
-    always@(posedge clk or negedge rst)begin
+    always@(posedge clk or posedge rst)begin
         if(!rst) begin
+             best <= find_best();
             if(issue_valid) begin
-                RS[best].valid <= 1'b0;
+                
             end
         end
     end
 
-
-    always_comb begin
-        if(best != invalid_index)begin
+    logic [$clog2(NUM_RS_ENTRIES):0] best_reg;
+    always_latch begin
+        if(flush) begin
+            issue_valid       = 1'b0;
+            issue_free_valid  = 1'b0;
+            issue_free        = 'hx;
+        end
+        else if(best != invalid_index)begin
             issue_instruction = RS[best];
             issue_valid       = 1'b1;
             issue_free        = 0;
             issue_free_valid  = 1'b1;
             issue_free        = best;
+            RS[best].valid    = 1'b0;
         end
         else begin
             //issue_instruction <= 'h0;
             issue_valid       = 1'b0;
             issue_free_valid  = 1'b0;
-            issue_free        = best;
+            issue_free        = 'hx;
             issue_free_valid  = 1'b0;
             issue_free        = 'hx;
         end
     end
     // Find the youngest ready instruction
 
-    always_latch begin
+    function [$clog2(NUM_RS_ENTRIES):0] find_best();
+    integer i;
+    begin
         best = invalid_index; // Initialize to invalid index
-        for (int i = 0; i < NUM_RS_ENTRIES; i++) begin
+        for (i = 0; i < NUM_RS_ENTRIES; i = i + 1) begin
             if(RS[i].valid)begin
                 case(RS[i].opcode)
                     LOAD, STORE: begin
@@ -175,27 +184,28 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
                 endcase
             end
         end
+        return best;
     end
-
+    endfunction
     // For debugging: dump Reservation Station contents at each clock cycle
     integer           mcd;
 
     always_ff @(negedge clk) begin
 
         case(TYPE)
-            0: mcd = $fopen("./build/RS_ALU.txt","w");
-            1: mcd = $fopen("./build/RS_LSU.txt","w");
-            2: mcd = $fopen("./build/RS_BRU.txt","w");
-            default: mcd = $fopen("./build/RS_UNKNOWN.txt","w");
+            0: mcd = $fopen("../test/build/RS_ALU.txt","w");
+            1: mcd = $fopen("../test/build/RS_LSU.txt","w");
+            2: mcd = $fopen("../test/build/RS_BRU.txt","w");
+            default: mcd = $fopen("../test/build/RS_UNKNOWN.txt","w");
         endcase
 
         $fdisplay(mcd,"----- RS contents at time -----");
-        $fdisplay(mcd,"Index | rob_id | funct7 | funct3 | rs1_phy | rs2_phy | rd_phy | immediate | opcode |age | valid");
+        $fdisplay(mcd,"Index | rob_id |   addr   | funct7 | funct3 | rs1_phy | rs2_phy | rd_phy | immediate | opcode | age | valid");
         $fdisplay(mcd,"-----------------------------------------");
 
         for (i=0; i < NUM_RS_ENTRIES; i=i+1) begin
-            $fdisplay(mcd,"%5d |  %4d  |  %3b   |  %3b   |   %3d   |   %2d     |   %2d  |   %4d    |  %7b | %d |  %b", 
-                i, RS[i].rob_id, RS[i].funct7, RS[i].funct3, RS[i].rs1_phy, RS[i].rs2_phy, RS[i].rd_phy, RS[i].immediate, RS[i].opcode, RS[i].age, RS[i].valid);
+            $fdisplay(mcd,"%5d |  %4d  | %8h |  %4b  |  %4b  |   %3d   |   %3d   |   %2d   |  %5d  | %7b  | %3d | %b", 
+                i, RS[i].rob_id, RS[i].addr, RS[i].funct7, RS[i].funct3, RS[i].rs1_phy, RS[i].rs2_phy, RS[i].rd_phy, $signed(RS[i].immediate), RS[i].opcode, RS[i].age, RS[i].valid);
         end
 
         $fclose(mcd);

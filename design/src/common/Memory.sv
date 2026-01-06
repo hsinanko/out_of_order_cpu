@@ -85,7 +85,7 @@ module Memory #(
     integer           mcd;
 
     always_ff @(negedge clk) begin
-        mcd = $fopen("./build/Memory.txt","w");
+        mcd = $fopen("../../test/build/Memory.txt","w");
 
         for (i=0; i< DEPTH; i=i+1) begin
             $fdisplay(mcd,"%2d %8h", i, MEM[i]);
