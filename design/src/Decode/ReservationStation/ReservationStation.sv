@@ -3,10 +3,11 @@
 import parameter_pkg::*;
 import typedef_pkg::*;
 
-module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REGS = 64, TYPE = 0)(
+module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, TYPE = 0)(
     input logic clk,
     input logic rst,
     input logic flush,
+    input logic stall_dispatch,
     input logic [PHY_REGS-1:0]PRF_valid,
     // ====== dispatch instruction ======
     // first instruction
@@ -19,7 +20,8 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
     input logic dispatch_valid_1,
     // RS --> issue
     output RS_ENTRY_t issue_instruction,
-    output logic issue_valid
+    output logic issue_valid,
+    input logic busy
 );
 
     RS_ENTRY_t RS[0:NUM_RS_ENTRIES-1];
@@ -27,7 +29,7 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
     logic [$clog2(NUM_RS_ENTRIES)-1:0]head;
     logic [$clog2(NUM_RS_ENTRIES)-1:0]tail;
     logic [$clog2(NUM_RS_ENTRIES):0]num_free;
-    logic [4:0]global_age;
+    logic [31:0]global_age;
     logic issue_free_valid;
     logic [$clog2(NUM_RS_ENTRIES)-1:0]issue_free;
     integer i;
@@ -55,7 +57,7 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
                 RS[i].valid <= 1'b0;
             end
             num_free    <= NUM_RS_ENTRIES;
-            global_age  <= 5'b0;
+            global_age  <= '0;
         end
         else if(flush) begin
             // On flush, invalidate all entries in the reservation station
@@ -63,7 +65,12 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
                 RS[i].valid <= 1'b0;
             end
             num_free    <= NUM_RS_ENTRIES;
-            global_age  <= 5'b0;
+            global_age  <= '0;
+        end
+        else if(stall_dispatch) begin
+            // Do nothing on stall
+            num_free    <= num_free;
+            global_age  <= global_age;
         end
         else begin
             // Dispatch first instruction
@@ -112,17 +119,22 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
     
     always@(posedge clk or posedge rst)begin
         if(!rst) begin
-             best <= find_best();
-            if(issue_valid) begin
-                
-            end
+            best <= find_best();
         end
     end
 
     logic [$clog2(NUM_RS_ENTRIES):0] best_reg;
     always_latch begin
         if(flush) begin
+            issue_instruction = '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
             issue_valid       = 1'b0;
+            issue_free_valid  = 1'b0;
+            issue_free        = 'hx;
+        end
+        else if(busy) begin
+            issue_valid       = 1'b0;
+            issue_free_valid  = 1'b0;
+            issue_free        = 'hx;
             issue_free_valid  = 1'b0;
             issue_free        = 'hx;
         end
@@ -135,7 +147,7 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
             RS[best].valid    = 1'b0;
         end
         else begin
-            //issue_instruction <= 'h0;
+            issue_instruction = '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
             issue_valid       = 1'b0;
             issue_free_valid  = 1'b0;
             issue_free        = 'hx;
@@ -168,7 +180,7 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
                         if ((best == invalid_index) || RS[i].age < RS[best].age)
                             best = i;
                     end
-                    OP_IMM, SYSTEM, JALR: begin
+                    OP_IMM, JALR: begin
                         if (PRF_valid[RS[i].rs1_phy]) begin
                             if ((best == invalid_index) || RS[i].age < RS[best].age)
                                 best = i;
@@ -179,6 +191,13 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REG
                             if ((best == invalid_index) || RS[i].age < RS[best].age)
                                 best = i;
                         end
+                    end
+                    SYSTEM: begin
+                        if ((best == invalid_index) || RS[i].age < RS[best].age)
+                            best = i;
+                    end
+                    default: begin
+                        // Do nothing for unrecognized opcodes
                     end
 
                 endcase

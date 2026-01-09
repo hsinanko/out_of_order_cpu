@@ -9,9 +9,15 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     input logic clk,
     input logic rst,
     input logic [ADDR_WIDTH-1:0] boot_pc,
-    output logic done
+    output logic done,
+    output logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out,
+    output logic [PHY_REGS-1:0]PRF_busy_out,
+    output logic [PHY_REGS-1:0]PRF_valid_out,
+    output logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out
 );
 
+
+    // ============= Flush Logic ===================
     logic flush;
     logic isFlush;
     logic [ADDR_WIDTH-1:0] redirect_pc;
@@ -27,6 +33,15 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
             flush <= 1'b0;
             redirect_pc <= 'h0;
         end
+    end
+
+    always_ff @(posedge clk or posedge rst)begin
+        if(rst)
+            done <= 1'b0;
+        else if(retire_done_valid_reg && !flush)
+            done <= 1'b1;
+        else
+            done <= done;
     end
     // ============= Instruction Fetch ===================
     logic [ADDR_WIDTH-1:0]instruction_addr_0, instruction_addr_1;
@@ -87,18 +102,20 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     logic [DATA_WIDTH-1:0] rs2_data_branch;
 
 
-    logic [ROB_WIDTH-1:0] alu_rob_id;
+    logic [ROB_WIDTH-1:0]  alu_rob_id;
     logic [DATA_WIDTH-1:0] alu_output;
-    logic [PHY_WIDTH-1:0] rd_phy_alu;
-
-    logic [ROB_WIDTH-1:0] ls_rob_id;
-    logic [DATA_WIDTH-1:0] mem_read_en;
-    logic [4:0] mem_funct3;
-    logic [ADDR_WIDTH-1:0] raddr;
-    logic [PHY_WIDTH-1:0] rd_phy_ls;
-    logic [DATA_WIDTH-1:0] wdata;
-    logic [ADDR_WIDTH-1:0] waddr;
-    logic wdata_valid;
+    logic [PHY_WIDTH-1:0]  rd_phy_alu;
+    logic                  busy_alu;
+    logic [ADDR_WIDTH-1:0] store_waddr;
+    logic [DATA_WIDTH-1:0] store_wdata;
+    logic [ROB_WIDTH-1:0]  store_rob_id;
+    logic                  store_valid;
+    logic [2:0]            load_funct3;
+    logic [ADDR_WIDTH-1:0] load_raddr;
+    logic [ROB_WIDTH-1:0]  load_rob_id;
+    logic [PHY_WIDTH-1:0]  load_rd_phy;
+    logic                  load_valid;
+    logic                  busy_lsu;
 
     logic [ROB_WIDTH-1:0] branch_rob_id;
     logic actual_taken;
@@ -107,6 +124,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     logic [ADDR_WIDTH-1:0] nextPC;
     logic [PHY_WIDTH-1:0] rd_phy_branch;
     logic isJump;
+    logic busy_branch;
 
 
     // ============= Write Back Stage ==================
@@ -114,12 +132,12 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     logic [ROB_WIDTH-1:0]  commit_alu_rob_id_reg;
     logic [PHY_WIDTH-1:0]  commit_rd_alu_reg;
     logic [DATA_WIDTH-1:0] commit_alu_result_reg;
-    logic [1:0]            commit_ls_valid_reg;
-    logic [ROB_WIDTH-1:0]  commit_ls_rob_id_reg;
-    logic [PHY_WIDTH-1:0]  commit_rd_ls_reg;
-    logic [DATA_WIDTH-1:0] commit_mem_output_reg;
-    logic [DATA_WIDTH-1:0] commit_wdata_reg;
-    logic [ADDR_WIDTH-1:0] commit_waddr_reg;
+    logic [1:0]            commit_load_valid_reg;
+    logic [ROB_WIDTH-1:0]  commit_load_rob_id_reg;
+    logic [PHY_WIDTH-1:0]  commit_rd_load_reg;
+    logic [DATA_WIDTH-1:0] commit_load_rdata_reg;
+    logic                  commit_store_valid_reg;
+    logic [ROB_WIDTH-1:0]  commit_store_rob_id_reg;
     logic                  commit_branch_valid_reg;
     logic                  commit_jump_valid_reg;
     logic [ROB_WIDTH-1:0]  commit_branch_rob_id_reg;
@@ -133,29 +151,34 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     logic [PHY_REGS-1:0]PRF_busy;
     logic [PHY_REGS-1:0]PRF_valid;
     logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat;
-
+    // ============= Control Unit ==================
+    logic stall_fetch;
+    logic stall_dispatch;
     // ================== Memory Interface ==================
+    // memory port
+    logic mem_rd_en;
+    logic [ADDR_WIDTH-1:0] mem_raddr;
     logic [DATA_WIDTH-1:0] mem_rdata;
     logic mem_rdata_valid;
-
-    // memory port
     logic mem_write_en;
     logic [ADDR_WIDTH-1:0] mem_waddr;
     logic [DATA_WIDTH-1:0] mem_wdata;
-
-    logic [ADDR_WIDTH-1:0] mem_addr;
+    
 
     // ============ Reorder Buffer ==================
     logic                  commit_alu_valid;
     logic [ROB_WIDTH-1:0]  commit_alu_rob_id;
     logic [PHY_WIDTH-1:0]  commit_rd_alu;
     logic [DATA_WIDTH-1:0] commit_alu_result;
-    logic [1:0]            commit_ls_valid;
-    logic [ROB_WIDTH-1:0]  commit_ls_rob_id;
-    logic [PHY_WIDTH-1:0]  commit_rd_ls;
-    logic [DATA_WIDTH-1:0] commit_mem_output;
-    logic [DATA_WIDTH-1:0] commit_wdata;
-    logic [ADDR_WIDTH-1:0] commit_waddr;
+    // load
+    logic                  commit_load_valid;
+    logic [ROB_WIDTH-1:0]  commit_load_rob_id;
+    logic [PHY_WIDTH-1:0]  commit_rd_load;
+    logic [DATA_WIDTH-1:0] commit_load_rdata;
+    // store
+    logic                  commit_store_valid;
+    logic [ROB_WIDTH-1:0]  commit_store_rob_id;
+    // branch
     logic                  commit_branch_valid;
     logic                  commit_jump_valid;
     logic [ROB_WIDTH-1:0]  commit_branch_rob_id;
@@ -165,6 +188,8 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     logic [ADDR_WIDTH-1:0] commit_actual_target;
     logic                  commit_actual_taken;
     logic [ADDR_WIDTH-1:0] commit_update_pc;
+
+    logic rob_full, rob_empty;
     // ============= Retire Stage ==================
 
     logic [4:0] rd_arch_commit;
@@ -189,7 +214,18 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     logic retire_branch_valid_reg;
     logic retire_done_valid_reg;
 
+    //============ Free List ==================
+    logic free_list_full, free_list_empty;
 
+
+    //============== Unified Instruction/Data Memory ==================
+    logic [4096*8-1:0] instr_data;
+    logic [4096*8-1:0] init_data;
+    
+    Memory #(32'h0000_0000, 32'h0000_1000, ADDR_WIDTH, DATA_WIDTH) UnifiedMemory(
+        .instr_data(instr_data),
+        .data_data(init_data)
+    );
 
 
     // ============= Instruction Fetch ===================
@@ -206,6 +242,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .clk(clk),
         .rst(rst),
         .pc(pc),
+        .instr_data(instr_data),
         .instruction_addr_0(instruction_addr_0),
         .instruction_addr_1(instruction_addr_1),
         .instruction_0(instruction_0),
@@ -246,8 +283,20 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
             predict_taken_1_reg    <= 'h0;
             predict_target_1_reg   <= 'h0;
         end
+        else if(stall_fetch)begin
+            pc                     <= pc;
+            instruction_addr_0_reg <= instruction_addr_0_reg;
+            instruction_addr_1_reg <= instruction_addr_1_reg;
+            instruction_0_reg      <= instruction_0_reg;
+            instruction_1_reg      <= instruction_1_reg;
+            instruction_valid_reg  <= instruction_valid_reg;
+            predict_taken_0_reg    <= predict_taken_0_reg;
+            predict_target_0_reg   <= predict_target_0_reg;
+            predict_taken_1_reg    <= predict_taken_1_reg;
+            predict_target_1_reg   <= predict_target_1_reg;
+        end
         else begin
-            pc                     <= predict_target_1_reg;
+            pc                     <= predict_target_1;
             instruction_addr_0_reg <= instruction_addr_0;
             instruction_addr_1_reg <= instruction_addr_1;
             instruction_0_reg      <= instruction_0;
@@ -266,11 +315,12 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     RS_ENTRY_t issue_instruction_alu_reg, issue_instruction_ls_reg, issue_instruction_branch_reg;
     logic issue_alu_valid_reg, issue_ls_valid_reg, issue_branch_valid_reg;
 
-    Rename #(ADDR_WIDTH, DATA_WIDTH, REG_WIDTH, ARCH_REGS, PHY_REGS, ROB_WIDTH, PHY_WIDTH) Rename_Unit (
+    Rename #(ADDR_WIDTH, DATA_WIDTH, REG_WIDTH, ARCH_REGS, PHY_REGS, NUM_RS_ENTRIES, ROB_WIDTH, PHY_WIDTH) Rename_Unit (
         .clk(clk),
         .rst(rst),
         .flush(flush),
         .PRF_valid(PRF_valid),
+        .stall_dispatch(stall_dispatch),
         //======== Instruction Fetch =============================
         .instruction_valid(instruction_valid_reg),
         .instruction_addr_0(instruction_addr_0_reg),
@@ -315,7 +365,10 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .issue_instruction_branch(issue_instruction_branch),
         .issue_alu_valid(issue_alu_valid),
         .issue_ls_valid(issue_ls_valid),
-        .issue_branch_valid(issue_branch_valid)
+        .issue_branch_valid(issue_branch_valid),
+        .busy_alu(busy_alu),
+        .busy_lsu(busy_lsu),
+        .busy_branch(busy_branch)
     );
 
 
@@ -368,25 +421,33 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .rs1_data_branch(rs1_data_branch),
         .rs2_data_branch(rs2_data_branch),
         .branch_valid(branch_valid),
-        // to execution outputs
+        // output to commit stage
         .alu_rob_id(alu_rob_id),
         .alu_output(alu_output),
         .rd_phy_alu(rd_phy_alu),
-        .ls_rob_id(ls_rob_id),
-        .mem_read_en(mem_read_en),
-        .mem_funct3(mem_funct3),
-        .raddr(raddr),
-        .rd_phy_ls(rd_phy_ls),
-        .wdata(wdata),
-        .waddr(waddr),
-        .wdata_valid(wdata_valid),
+        .busy_alu(busy_alu),
+        // Store outputs
+        .store_waddr(store_waddr),
+        .store_wdata(store_wdata),
+        .store_rob_id(store_rob_id),
+        .store_valid(store_valid),
+        // Load outputs
+        .load_funct3(load_funct3),
+        .load_valid(load_valid),
+        .load_raddr(load_raddr),
+        .load_rob_id(load_rob_id),
+        .load_rd_phy(load_rd_phy),
+        .busy_lsu(busy_lsu),
+        // Branch outputs
         .branch_rob_id(branch_rob_id),
         .actual_taken(actual_taken),
         .mispredict(mispredict),
         .jumpPC(jumpPC),
         .update_pc(update_pc),
+        .nextPC(nextPC),
         .rd_phy_branch(rd_phy_branch),
-        .isJump(isJump)
+        .isJump(isJump),
+        .busy_branch(busy_branch)
     );
 
     logic [ROB_WIDTH-1:0]alu_rob_id_reg;
@@ -394,15 +455,15 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     logic [PHY_WIDTH-1:0]rd_phy_alu_reg;
     logic alu_valid_reg;
     // Load/Store outputs
-    logic [ROB_WIDTH-1:0]ls_rob_id_reg;
-    logic mem_read_en_reg;
-    logic [4:0]mem_funct3_reg;
-    logic [ADDR_WIDTH-1:0]raddr_reg;
-    logic [PHY_WIDTH-1:0]rd_phy_ls_reg;
-    logic [DATA_WIDTH-1:0] wdata_reg;
-    logic [ADDR_WIDTH-1:0] waddr_reg;
-    logic wdata_valid_reg;
-    logic ls_valid_reg;
+    logic [ADDR_WIDTH-1:0] store_waddr_reg;
+    logic [DATA_WIDTH-1:0] store_wdata_reg;
+    logic [ROB_WIDTH-1:0] store_rob_id_reg;
+    logic store_valid_reg;
+    logic [2:0] load_funct3_reg;
+    logic [ADDR_WIDTH-1:0] load_raddr_reg;
+    logic [ROB_WIDTH-1:0] load_rob_id_reg;
+    logic [PHY_WIDTH-1:0]load_rd_phy_reg;
+    logic load_valid_reg;
     // Branch outputs
     logic [ROB_WIDTH-1:0]branch_rob_id_reg;
     logic actual_taken_reg;
@@ -421,12 +482,15 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
             alu_output_reg   <= 0;
             rd_phy_alu_reg   <= 0;
             // Load/Store outputs
-            ls_rob_id_reg    <= 0;
-
-            rd_phy_ls_reg    <= 0;
-            wdata_reg        <= 0;
-            waddr_reg        <= 0;
-            wdata_valid_reg  <= 0;
+            store_waddr_reg  <= 0;
+            store_wdata_reg  <= 0;
+            store_rob_id_reg <= 0;
+            store_valid_reg  <= 0;
+            load_funct3_reg  <= 0;
+            load_valid_reg   <= 0;
+            load_raddr_reg   <= 0;
+            load_rob_id_reg  <= 0;
+            load_rd_phy_reg  <= 0;
             // Branch outputs
             branch_rob_id_reg <= 0;
             actual_taken_reg <= 0;
@@ -436,46 +500,62 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
             rd_phy_branch_reg <= 0;
             isJump_reg        <= 0;
             mispredict_reg    <= 0;
-        end else begin
+        end else 
             // alu outputs
-            if(issue_alu_valid_reg) begin
+            if(alu_valid) begin
                 alu_rob_id_reg   <= alu_rob_id;
                 alu_output_reg   <= alu_output;
                 rd_phy_alu_reg   <= rd_phy_alu;
+                alu_valid_reg    <= alu_valid;
             end
             else begin
                 alu_rob_id_reg   <= 0;
                 alu_output_reg   <= 0;
                 rd_phy_alu_reg   <= 0;
+                alu_valid_reg    <= 0;
             end
-            alu_valid_reg        <= alu_valid;
-            // Load/Store outputs
-            if(issue_ls_valid_reg) begin
-                ls_rob_id_reg    <= ls_rob_id;
-                rd_phy_ls_reg    <= rd_phy_ls;
-                wdata_reg        <= wdata;
-                waddr_reg        <= waddr;
-                wdata_valid_reg  <= wdata_valid;
+            
+            // Store outputs
+            if(store_valid) begin
+                store_waddr_reg  <= store_waddr;
+                store_wdata_reg  <= store_wdata;
+                store_rob_id_reg <= store_rob_id;
+                store_valid_reg  <= store_valid;
             end
             else begin
-                ls_rob_id_reg    <= 0;
-                rd_phy_ls_reg    <= 0;
-                wdata_reg        <= 0;
-                waddr_reg        <= 0;
-                wdata_valid_reg  <= 0;
+                store_waddr_reg  <= 0;
+                store_wdata_reg  <= 0;
+                store_rob_id_reg <= 0;
+                store_valid_reg  <= 0;
             end
-            ls_valid_reg         <= ls_valid;
+            // Load outputs
+            if(load_valid)begin
+                load_funct3_reg  <= load_funct3;
+                load_raddr_reg   <= load_raddr;
+                load_rob_id_reg  <= load_rob_id;
+                load_rd_phy_reg  <= load_rd_phy;
+                load_valid_reg   <= load_valid;
+            end
+            else begin
+                load_funct3_reg  <= 0;
+                load_raddr_reg   <= 0;
+                load_rob_id_reg  <= 0;
+                load_rd_phy_reg  <= 0;
+                load_valid_reg   <= 0;
+            end
+
 
             // Branch outputs
-            if(issue_branch_valid_reg) begin
+            if(branch_valid) begin
                 branch_rob_id_reg <= branch_rob_id;
                 actual_taken_reg <= actual_taken;
                 jumpPC_reg        <= jumpPC;
-                nextPC_reg        <= (issue_instruction_branch.addr + 'h4);
+                nextPC_reg        <= nextPC;
                 update_pc_reg     <= update_pc;
                 rd_phy_branch_reg <= rd_phy_branch;
                 isJump_reg        <= isJump;
                 mispredict_reg    <= mispredict;
+                branch_valid_reg  <= branch_valid;
             end
             else begin
                 branch_rob_id_reg <= 0;
@@ -486,14 +566,15 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
                 rd_phy_branch_reg <= 0;
                 isJump_reg        <= 0;
                 mispredict_reg    <= 0;
+                branch_valid_reg  <= 0;
             end
-            branch_valid_reg      <= branch_valid;
-        end
+            
+        
     end
 
     // ============= Commit Stage ==================
 
-    WriteBack #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH) WriteBack_Unit(
+    WriteBack #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH, FIFO_DEPTH) WriteBack_Unit(
         .clk(clk),
         .rst(rst),
         .flush(flush),
@@ -503,15 +584,17 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .alu_output(alu_output_reg),
         .rd_phy_alu(rd_phy_alu_reg),
         .alu_valid(alu_valid_reg),
-        // from load/store unit
-        .ls_rob_id(ls_rob_id_reg),
-        .rd_phy_ls(rd_phy_ls_reg),
-        .mem_rdata(mem_rdata),
-        .mem_rdata_valid(mem_rdata_valid),
-        .wdata(wdata_reg),
-        .waddr(waddr_reg),
-        .wdata_valid(wdata_valid_reg),
-        .ls_valid(ls_valid_reg),
+        // Store outputs
+        .store_waddr(store_waddr_reg),
+        .store_wdata(store_wdata_reg),
+        .store_rob_id(store_rob_id_reg),
+        .store_valid(store_valid_reg),
+        // Load outputs
+        .load_funct3(load_funct3_reg),
+        .load_valid(load_valid_reg),
+        .load_raddr(load_raddr_reg),
+        .load_rob_id(load_rob_id_reg),
+        .load_rd_phy(load_rd_phy_reg),
         // Branch information
         .branch_rob_id(branch_rob_id_reg),
         .jumpPC(jumpPC_reg),
@@ -527,20 +610,35 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .commit_alu_valid(commit_alu_valid),
         .commit_rd_alu(commit_rd_alu),
         .commit_alu_result(commit_alu_result),
-        .commit_ls_valid(commit_ls_valid),
-        .commit_ls_rob_id(commit_ls_rob_id),
-        .commit_rd_ls(commit_rd_ls),
-        .commit_mem_output(commit_mem_output),
-        .commit_wdata(commit_wdata),
-        .commit_waddr(commit_waddr),
+        // load
+        .commit_load_valid(commit_load_valid),
+        .commit_load_rob_id(commit_load_rob_id),
+        .commit_rd_load(commit_rd_load),
+        .commit_load_rdata(commit_load_rdata),
+        // store
+        .commit_store_valid(commit_store_valid),
+        .commit_store_rob_id(commit_store_rob_id),
+        // branch
         .commit_branch_valid(commit_branch_valid),
+        .commit_jump_valid(commit_jump_valid),
         .commit_branch_rob_id(commit_branch_rob_id),
         .commit_rd_branch(commit_rd_branch),
         .commit_nextPC(commit_nextPC),
         .commit_mispredict(commit_mispredict),
         .commit_actual_target(commit_actual_target),
         .commit_actual_taken(commit_actual_taken),
-        .commit_update_pc(commit_update_pc)
+        .commit_update_pc(commit_update_pc),
+        // ========== Retire Interface ===========
+        // Memory Interface
+        .mem_rd_en(mem_rd_en),
+        .mem_raddr(mem_raddr),
+        .mem_rdata(mem_rdata),
+        .mem_rdata_valid(mem_rdata_valid),
+        // Retire Interface
+        .retire_store_valid(retire_store_valid_reg),
+        .mem_write_en(mem_write_en),
+        .mem_waddr(mem_waddr),
+        .mem_wdata(mem_wdata)
     );
 
 
@@ -550,13 +648,14 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
             commit_alu_rob_id_reg    <= 1'b0;
             commit_rd_alu_reg        <= 1'b0;
             commit_alu_result_reg    <= 1'b0;
-            commit_ls_valid_reg      <= 2'b0;
-            commit_ls_rob_id_reg     <= 1'b0;
-            commit_rd_ls_reg         <= 1'b0;
-            commit_mem_output_reg    <= 1'b0;
-            commit_wdata_reg         <= 1'b0;
-            commit_waddr_reg         <= 1'b0;
+            commit_load_valid_reg    <= 1'b0;
+            commit_load_rob_id_reg   <= 1'b0;
+            commit_rd_load_reg       <= 'b0;
+            commit_load_rdata_reg    <= 'b0;
+            commit_store_valid_reg   <= 1'b0;
+            commit_store_rob_id_reg  <= 1'b0;
             commit_branch_valid_reg  <= 1'b0;
+            commit_jump_valid_reg    <= 1'b0;
             commit_branch_rob_id_reg <= 1'b0;
             commit_rd_branch_reg     <= 1'b0;
             commit_nextPC_reg        <= 1'b0;
@@ -570,12 +669,12 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
             commit_alu_rob_id_reg    <= commit_alu_rob_id;
             commit_rd_alu_reg        <= commit_rd_alu;
             commit_alu_result_reg    <= commit_alu_result;
-            commit_ls_valid_reg      <= commit_ls_valid;
-            commit_ls_rob_id_reg     <= commit_ls_rob_id;
-            commit_rd_ls_reg         <= commit_rd_ls;
-            commit_mem_output_reg    <= commit_mem_output;
-            commit_wdata_reg         <= commit_wdata;
-            commit_waddr_reg         <= commit_waddr;
+            commit_load_valid_reg    <= commit_load_valid;
+            commit_load_rob_id_reg   <= commit_load_rob_id;
+            commit_rd_load_reg       <= commit_rd_load;
+            commit_load_rdata_reg    <= commit_load_rdata;
+            commit_store_valid_reg   <= commit_store_valid;
+            commit_store_rob_id_reg  <= commit_store_rob_id;
             commit_branch_valid_reg  <= commit_branch_valid;
             commit_jump_valid_reg    <= commit_jump_valid;
             commit_branch_rob_id_reg <= commit_branch_rob_id;
@@ -591,15 +690,15 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     // ============= Memory ==============
 
 
-    Memory #(ADDR_WIDTH, DATA_WIDTH) Memory_Unit(
+    DataMemory #(ADDR_WIDTH, DATA_WIDTH, DATA_MEM_SIZE) DataMemory(
         .clk(clk),
         .rst(rst),
-        .raddr(raddr),
+        .init_data(init_data),
+        .mem_write_en(mem_write_en),
         .waddr(mem_waddr),
         .wdata(mem_wdata),
-        .funct3(mem_funct3),
-        .mem_write_en(mem_write_en),
-        .mem_read_en(mem_read_en),
+        .mem_rd_en(mem_rd_en),
+        .raddr(mem_raddr),
         .rdata(mem_rdata),
         .rdata_valid(mem_rdata_valid)
     );
@@ -610,6 +709,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .clk(clk),
         .rst(rst),
         .flush(flush),
+        .done(retire_done_valid_reg),
         // first instruction
         .instr_valid(instr_valid),
         .rs1_arch_0(rs1_arch_0),
@@ -628,13 +728,18 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .rs2_phy_1(rs2_phy_1),
         .rd_phy_1(rd_phy_1),
         // BACK_RAT will handle commit updates
-        .back_rat(back_rat)
+        .back_rat(back_rat),
+        .front_rat_out(front_rat_out)
     );
 
     Freelist #(ARCH_REGS, PHY_REGS, PHY_WIDTH, FREE_REG) free_list(
         .clk(clk),
         .rst(rst),
         .flush(flush),
+        .full(free_list_full),
+        .empty(free_list_empty),
+        .done(retire_done_valid_reg),
+        // rename interface to allocate physical registers
         .valid(free_list_valid),
         .rd_phy_new_0(rd_phy_new_0),
         .rd_phy_new_1(rd_phy_new_1),
@@ -657,8 +762,10 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .rob_id_1(rob_id_1),
         .commit_alu_valid(commit_alu_valid_reg),
         .commit_alu_rob_id(commit_alu_rob_id_reg),
-        .commit_ls_valid(|commit_ls_valid_reg),
-        .commit_ls_rob_id(commit_ls_rob_id_reg),
+        .commit_load_valid(commit_load_valid_reg),
+        .commit_load_rob_id(commit_load_rob_id_reg),
+        .commit_store_valid(commit_store_valid_reg),
+        .commit_store_rob_id(commit_store_rob_id_reg),
         .commit_branch_valid(commit_branch_valid_reg),
         .commit_branch_rob_id(commit_branch_rob_id_reg),
         .commit_mispredict(commit_mispredict_reg),
@@ -678,10 +785,12 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .retire_store_valid(retire_store_valid),
         .retire_branch_valid(retire_branch_valid),
         .retire_done_valid(retire_done_valid),
-        .rob_debug(rob_debug)
+        .rob_debug(rob_debug),
+        .rob_full(rob_full),
+        .rob_empty(rob_empty)
     );
 
-    assign done = retire_done_valid_reg;
+    
 
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
@@ -712,18 +821,6 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         end
     end
 
-    StoreQueue #(ADDR_WIDTH, DATA_WIDTH, QUEUE) StoreQueue_Unit(
-        .clk(clk),
-        .rst(rst),
-        .wb_valid(commit_ls_valid_reg[1]),
-        .waddr_wb(commit_waddr_wb_reg),
-        .wdata_wb(commit_wdata_wb_reg),
-        .store_valid(retire_store_valid_reg),
-        .mem_write_en(mem_write_en),
-        .mem_waddr(mem_waddr),
-        .mem_wdata(mem_wdata)
-    );
-
     Back_RAT #(ARCH_REGS, PHY_WIDTH) Back_RAT_Unit(
         .clk(clk),
         .rst(rst),
@@ -734,10 +831,22 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .back_rat(back_rat)
     );
 
+    Control Control_Unit(
+        .clk(clk),
+        .rst(rst),
+        .rob_full(rob_full),
+        .rob_empty(rob_empty),
+        .free_list_full(free_list_full),
+        .free_list_empty(free_list_empty),
+        .stall_fetch(stall_fetch),
+        .stall_dispatch(stall_dispatch)
+    );
+
     PhysicalRegister #(DATA_WIDTH, PHY_REGS) PhysicalRegisterFile(
         .clk(clk),
         .rst(rst),
         .flush(flush),
+        .done(retire_done_valid_reg),
         .busy_valid(busy_valid),
         .rd_phy_busy_0(rd_phy_busy_0),
         .rd_phy_busy_1(rd_phy_busy_1),
@@ -766,9 +875,9 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .commit_alu_valid(commit_alu_valid_reg),
         .commit_rd_alu(commit_rd_alu_reg),
         .commit_alu_result(commit_alu_result_reg),
-        .commit_ls_valid(commit_ls_valid_reg[0]),
-        .commit_rd_ls(commit_rd_ls_reg),
-        .commit_mem_output(commit_mem_output_reg),
+        .commit_load_valid(commit_load_valid_reg),
+        .commit_rd_load(commit_rd_load_reg),
+        .commit_load_rdata(commit_load_rdata_reg),
         .commit_jump_valid(commit_jump_valid_reg),
         .commit_branch_valid(commit_branch_valid_reg),
         .commit_rd_branch(commit_rd_branch_reg),
@@ -777,9 +886,26 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         // =========== commit interface =================
         .rd_phy_old_commit(rd_phy_old_commit_reg),
         .rd_phy_new_commit(rd_phy_new_commit_reg),
-        .retire_valid(retire_pr_valid_reg)
+        .retire_valid(retire_pr_valid_reg),
+        // outputs for debug
+        .PRF_data_out(PRF_data_out),
+        .PRF_busy_out(PRF_busy_out),
+        .PRF_valid_out(PRF_valid_out)
     );
 
+    logic [ROB_WIDTH-1:0] retire_count;
+
+    always_ff @(posedge clk or posedge rst) begin
+        if (rst) begin
+            retire_count <= '0;
+        end
+        else if(flush) begin
+            retire_count <= 0;
+        end
+        else if (retire_pr_valid || retire_store_valid || retire_branch_valid) begin
+            retire_count <= retire_count + 1;
+        end
+    end
 
     // ============= Debug Tasks ==================
 
@@ -797,10 +923,10 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
                          issue_alu_valid_reg, issue_instruction_alu_reg,
                          issue_ls_valid_reg, issue_instruction_ls_reg,
                          issue_branch_valid_reg, issue_instruction_branch_reg);
-            print_Execution(alu_valid, ls_valid, branch_valid,
-                            alu_rob_id, alu_output,
-                            ls_rob_id, wdata_valid, waddr, wdata, rd_phy_ls, mem_rdata,
-                            branch_rob_id, nextPC);
+            // print_Execution(alu_valid, ls_valid, branch_valid,
+            //                 alu_rob_id, alu_output,
+            //                 ls_rob_id, wdata_valid, waddr, wdata, rd_phy_ls, mem_rdata,
+            //                 branch_rob_id, nextPC);
             print_Commit(retire_pr_valid_reg, retire_store_valid_reg, retire_branch_valid_reg,
                          rd_arch_commit_reg, rd_phy_old_commit_reg, rd_phy_new_commit_reg);
             $display("**************************** END *****************************\n");

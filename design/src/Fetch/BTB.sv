@@ -22,6 +22,7 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
     typedef struct packed {
         logic                     valid;
         logic                     taken;
+        logic [(ADDR_WIDTH-BTB_WIDTH-3):0] tag;
         logic [ADDR_WIDTH-1:0]    target;
     } BTB_ENTRY_t;
 
@@ -37,7 +38,7 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
         if (pc_valid) begin
             index = pc[BTB_WIDTH+1:2];
             entry = btb[index];
-            if (entry.valid && entry.taken) begin
+            if (entry.valid && entry.taken && entry.tag == pc[ADDR_WIDTH-1:BTB_WIDTH+2]) begin
                 predict_taken_0 = 1;
                 predict_target_0 = entry.target;
 
@@ -48,7 +49,7 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
 
             index = predict_target_0[BTB_WIDTH+1:2];
             entry = btb[index];
-            if (entry.valid && entry.taken) begin
+            if (entry.valid && entry.taken && entry.tag == predict_target_0[ADDR_WIDTH-1:BTB_WIDTH+2]) begin
                 predict_taken_1 = 1;
                 predict_target_1 = entry.target;
             end
@@ -72,11 +73,13 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
                 btb[i].valid <= 0;
                 btb[i].taken <= 0;
                 btb[i].target <= '0;
+                btb[i].tag <= '0;
             end
         end else if (update_valid) begin
-            btb[update_index].valid <= 1;
-            btb[update_index].taken <= update_btb_taken;
+            btb[update_index].valid  <= 1;
+            btb[update_index].taken  <= update_btb_taken;
             btb[update_index].target <= update_btb_target;
+            btb[update_index].tag    <= update_btb_pc[ADDR_WIDTH-1:BTB_WIDTH+2];
         end
     end
 

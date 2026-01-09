@@ -1,10 +1,12 @@
 `timescale 1ns/1ps
 import typedef_pkg::*;
 import parameter_pkg::*;
-module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARCH_REGS = 32, PHY_REGS = 64, ROB_WIDTH = 4, PHY_WIDTH = 6)(
+module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARCH_REGS = 32, PHY_REGS = 64, NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_WIDTH = 6)(
     input  logic                  clk,
     input  logic                  rst,
     input  logic                  flush,
+    input  logic                  stall_dispatch,
+    //====== Physical Register File =================
     input  logic [PHY_REGS-1:0]   PRF_valid,
     //====== Instruction Decode ===================
     input  logic [1:0]instruction_valid,
@@ -56,7 +58,10 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
     output RS_ENTRY_t issue_instruction_branch,
     output logic issue_alu_valid,
     output logic issue_ls_valid,
-    output logic issue_branch_valid
+    output logic issue_branch_valid,
+    input logic busy_alu,
+    input logic busy_lsu,
+    input logic busy_branch
 );
     
     // Instruction Decode
@@ -104,11 +109,20 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
 
 
     logic isRename_0, isRename_1;
-    assign isRename_0 = (instr_0.opcode != STORE && instr_0.opcode != BRANCH || instr_0.opcode != SYSTEM) && (rd_arch_0 != 5'd0);
-    assign isRename_1 = (instr_1.opcode != STORE && instr_1.opcode != BRANCH || instr_1.opcode != SYSTEM) && (rd_arch_1 != 5'd0);
+    assign isRename_0 = (instr_0.opcode != STORE && instr_0.opcode != BRANCH && instr_0.opcode != SYSTEM) && (rd_arch_0 != 5'd0);
+    assign isRename_1 = (instr_1.opcode != STORE && instr_1.opcode != BRANCH && instr_1.opcode != SYSTEM) && (rd_arch_1 != 5'd0);
     //=========== Freelist =================
-    assign free_list_valid[0] = (!flush && instruction_valid[0] && isRename_0);
-    assign free_list_valid[1] = (!flush && instruction_valid[1] && isRename_1);
+
+    always_comb begin
+        if(flush)
+            free_list_valid = 2'b00;
+        else if(stall_dispatch)
+            free_list_valid = 2'b00;
+        else begin
+            free_list_valid[0] = (instruction_valid[0] && isRename_0);
+            free_list_valid[1] = (instruction_valid[1] && isRename_1);
+        end
+    end
 
     //=========== Physical Register File =================
     // Physical Register File outputs
@@ -120,7 +134,14 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
     //=========== Reorder Buffer =================
     // Reorder Buffer inputs/outputs
 
-    assign dispatch_valid = (!flush) ? instruction_valid : 2'b00;
+    always_comb begin
+        if(flush)
+            dispatch_valid = 2'b00;
+        else if(stall_dispatch)
+            dispatch_valid = 2'b00;
+        else
+            dispatch_valid = instruction_valid;
+    end
     //========== First instruction =================
     assign dispatch_rob_0.rd_arch    = rd_arch_0;
     assign dispatch_rob_0.rd_phy_old = rd_phy_0;
@@ -144,15 +165,24 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
     // ============= Decode / Dispatch Stage ==============
     logic [1:0]rename_valid;
     instruction_t rename_instruction_0;
-    logic [4:0] rename_rob_id_0;
+    logic [ROB_WIDTH-1:0] rename_rob_id_0;
     instruction_t rename_instruction_1;
-    logic [4:0] rename_rob_id_1;
+    logic [ROB_WIDTH-1:0] rename_rob_id_1;
 
     assign rename_rob_id_0 = rob_id_0;
     assign rename_rob_id_1 = rob_id_1;
 
-    assign rename_valid[0] = (!flush) ? instruction_valid[0] : 1'b0;
-    assign rename_valid[1] = (!flush) ? instruction_valid[1] : 1'b0;
+    always_comb begin
+        if(flush) begin
+            rename_valid = 2'b00;
+        end
+        else if(stall_dispatch)begin
+            rename_valid = 2'b00;
+        end
+        else begin
+            rename_valid = instruction_valid;
+        end
+    end
 
     assign rename_instruction_0.instruction_addr = instr_0.instruction_addr;
     assign rename_instruction_0.opcode           = instr_0.opcode;
@@ -182,6 +212,7 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
         .clk(clk),
         .rst(rst),
         .flush(flush),
+        .stall_dispatch(stall_dispatch),
         .PRF_valid(PRF_valid),
         .rename_valid(rename_valid),
         .rename_instruction_0(rename_instruction_0),
@@ -194,7 +225,10 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
         .issue_instruction_branch(issue_instruction_branch),
         .issue_alu_valid(issue_alu_valid),
         .issue_ls_valid(issue_ls_valid),
-        .issue_branch_valid(issue_branch_valid)
+        .issue_branch_valid(issue_branch_valid),
+        .busy_alu(busy_alu),
+        .busy_lsu(busy_lsu),
+        .busy_branch(busy_branch)
     );
 
 endmodule

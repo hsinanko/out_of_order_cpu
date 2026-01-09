@@ -14,10 +14,7 @@ module Issue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, ROB_WI
     input  logic issue_alu_valid,
     input  logic issue_ls_valid,
     input  logic issue_branch_valid,
-    // output logic issue_alu_en,
-    // output logic issue_ls_en,
-    // output logic issue_branch_en,
-    // output to physical registerfile
+    // ================ physical registerfile interface ==============
     output logic alu_valid,
     output logic ls_valid,
     output logic branch_valid,
@@ -33,33 +30,35 @@ module Issue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, ROB_WI
     output logic [PHY_WIDTH-1:0]rs2_phy_branch, 
     input  logic [DATA_WIDTH-1:0]rs1_data_branch,
     input  logic [DATA_WIDTH-1:0]rs2_data_branch,
-    // output to execution
+    // ============= execution ==================
     // ALU outputs
     output logic [ROB_WIDTH-1:0]alu_rob_id,
     output logic [DATA_WIDTH-1:0] alu_output,
     output logic [PHY_WIDTH-1:0]rd_phy_alu,
-    // Load/Store outputs
-    output logic [ROB_WIDTH-1:0]ls_rob_id,
-    output logic mem_read_en,
-    output logic [4:0]mem_funct3,
-    output logic [ADDR_WIDTH-1:0]raddr,
-    output logic [PHY_WIDTH-1:0]rd_phy_ls,
-    output logic [DATA_WIDTH-1:0] wdata,
-    output logic [ADDR_WIDTH-1:0] waddr,
-    output logic wdata_valid,
+    output logic busy_alu,
+    // Store outputs
+    output logic [ADDR_WIDTH-1:0] store_waddr, 
+    output logic [DATA_WIDTH-1:0] store_wdata,
+    output logic [ROB_WIDTH-1:0]  store_rob_id,
+    output logic                  store_valid,
+    // Load outputs
+    output logic [2:0]            load_funct3,
+    output logic [ADDR_WIDTH-1:0] load_raddr,
+    output logic [ROB_WIDTH-1:0]  load_rob_id,
+    output logic [PHY_WIDTH-1:0]  load_rd_phy,
+    output logic                  load_valid,
+    output logic                  busy_lsu,
     // Branch outputs
-    output logic [ROB_WIDTH-1:0]branch_rob_id,
-    output logic actual_taken,
-    output logic mispredict,
+    output logic [ROB_WIDTH-1:0] branch_rob_id,
+    output logic                  actual_taken,
+    output logic                  mispredict,
     output logic [ADDR_WIDTH-1:0] jumpPC,
     output logic [ADDR_WIDTH-1:0] update_pc,
-    output logic [PHY_WIDTH-1:0]rd_phy_branch,
-    output logic isJump
+    output logic [ADDR_WIDTH-1:0] nextPC,
+    output logic [PHY_WIDTH-1:0]  rd_phy_branch,
+    output logic                  isJump,
+    output logic                  busy_branch
 );
-
-    // assign issue_alu_en = 1;    // can be extended FIFO to avoid stuck
-    // assign issue_ls_en = 1;     // can be extended FIFO to avoid stuck
-    // assign issue_branch_en = 1; // can be extended FIFO to avoid stuck
 
     RS_ENTRY_t issue_instruction_alu_fifo;
     RS_ENTRY_t issue_instruction_ls_fifo;
@@ -67,6 +66,7 @@ module Issue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, ROB_WI
     logic issue_alu_valid_fifo;
     logic issue_ls_valid_fifo;
     logic issue_branch_valid_fifo;
+
 
     always_comb begin
         issue_instruction_alu_fifo    = issue_instruction_alu;
@@ -79,6 +79,9 @@ module Issue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, ROB_WI
     
 
     Execution #(ADDR_WIDTH, DATA_WIDTH, ROB_WIDTH, PHY_WIDTH) execution_unit(
+        .clk(clk),
+        .rst(rst),
+        .flush(flush),
         // from issue stage
         .issue_instruction_alu(issue_instruction_alu_fifo),
         .issue_instruction_ls(issue_instruction_ls_fifo),
@@ -106,23 +109,29 @@ module Issue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, ROB_WI
         .alu_rob_id(alu_rob_id),
         .alu_output(alu_output),
         .rd_phy_alu(rd_phy_alu),
-        // Load/Store outputs
-        .ls_rob_id(ls_rob_id),
-        .mem_read_en(mem_read_en),
-        .mem_funct3(mem_funct3),
-        .raddr(raddr),
-        .rd_phy_ls(rd_phy_ls),
-        .wdata(wdata),
-        .waddr(waddr),
-        .wdata_valid(wdata_valid),
+        .busy_alu(busy_alu),
+        // Store outputs
+        .store_waddr(store_waddr),
+        .store_wdata(store_wdata),
+        .store_rob_id(store_rob_id),
+        .store_valid(store_valid),
+        // Load outputs
+        .load_funct3(load_funct3),
+        .load_raddr(load_raddr),
+        .load_rob_id(load_rob_id),
+        .load_rd_phy(load_rd_phy),
+        .load_valid(load_valid),
+        .busy_lsu(busy_lsu),
         // Branch outputs
         .branch_rob_id(branch_rob_id),
         .actual_taken(actual_taken),
         .mispredict(mispredict),
         .actual_target(jumpPC),
         .update_pc(update_pc),
+        .nextPC(nextPC),
         .rd_phy_branch(rd_phy_branch),
-        .isJump(isJump)
+        .isJump(isJump),
+        .busy_branch(busy_branch)
     );
 
 endmodule

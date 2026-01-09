@@ -3,10 +3,11 @@
 import parameter_pkg::*;
 import typedef_pkg::*;
 
-module Dispatch #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REGS = 64, PHY_WIDTH = 6)(
+module Dispatch #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, PHY_WIDTH = 6)(
     input clk,
     input rst,
     input logic flush,
+    input logic stall_dispatch,
     input [PHY_REGS-1:0]PRF_valid,
     // ========== Instruction Decode ==============
     // first instruction
@@ -24,9 +25,11 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REGS = 64, PH
     output RS_ENTRY_t issue_instruction_branch,
     output logic issue_alu_valid,
     output logic issue_ls_valid,
-    output logic issue_branch_valid
+    output logic issue_branch_valid,
     // issue --> dispatch
-
+    input logic busy_alu,
+    input logic busy_lsu,
+    input logic busy_branch
 );
     logic dispatch_alu_valid_0, dispatch_ls_valid_0, dispatch_branch_valid_0;
     logic dispatch_alu_valid_1, dispatch_ls_valid_1, dispatch_branch_valid_1;
@@ -45,21 +48,36 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REGS = 64, PH
     assign isBranch_1 = (rename_instruction_1.opcode == BRANCH || rename_instruction_1.opcode == JAL || rename_instruction_1.opcode == JALR);
 
     always_comb begin
-        dispatch_alu_valid_0    = (!flush && rename_valid[0] && (isALU_0)) ? 1 : 0;
-        dispatch_ls_valid_0     = (!flush && rename_valid[0] && (isLoad_0 || isStore_0)) ? 1 : 0;
-        dispatch_branch_valid_0 = (!flush && rename_valid[0] && (isBranch_0)) ? 1 : 0;
+        if(flush || stall_dispatch) begin
+            dispatch_alu_valid_0    = 1'b0;
+            dispatch_ls_valid_0     = 1'b0;
+            dispatch_branch_valid_0 = 1'b0;
+        end
+        else begin
+            dispatch_alu_valid_0    = (rename_valid[0] && (isALU_0)) ? 1 : 0;
+            dispatch_ls_valid_0     = (rename_valid[0] && (isLoad_0 || isStore_0)) ? 1 : 0;
+            dispatch_branch_valid_0 = (rename_valid[0] && (isBranch_0)) ? 1 : 0;
+        end
     end
 
     always_comb begin
-        dispatch_alu_valid_1    = (!flush && rename_valid[1] && (isALU_1)) ? 1 : 0;
-        dispatch_ls_valid_1     = (!flush && rename_valid[1] && (isLoad_1 || isStore_1)) ? 1 : 0;
-        dispatch_branch_valid_1 = (!flush && rename_valid[1] && (isBranch_1)) ? 1 : 0;
+        if(flush || stall_dispatch) begin
+            dispatch_alu_valid_1    = 1'b0;
+            dispatch_ls_valid_1     = 1'b0;
+            dispatch_branch_valid_1 = 1'b0;
+        end
+        else begin
+            dispatch_alu_valid_1    = (rename_valid[1] && (isALU_1)) ? 1 : 0;
+            dispatch_ls_valid_1     = (rename_valid[1] && (isLoad_1 || isStore_1)) ? 1 : 0;
+            dispatch_branch_valid_1 = (rename_valid[1] && (isBranch_1)) ? 1 : 0;
+        end
     end
 
     ReservationStation #(NUM_RS_ENTRIES, ROB_WIDTH, PHY_REGS, 0) RS_ALU(
         .clk(clk),
         .rst(rst),
         .flush(flush),
+        .stall_dispatch(stall_dispatch),
         .PRF_valid(PRF_valid),
         .dispatch_instruction_0(rename_instruction_0),
         .rob_id_0(rob_id_0),
@@ -68,13 +86,15 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REGS = 64, PH
         .rob_id_1(rob_id_1),
         .dispatch_valid_1(dispatch_alu_valid_1),
         .issue_instruction(issue_instruction_alu),
-        .issue_valid(issue_alu_valid)
+        .issue_valid(issue_alu_valid),
+        .busy(busy_alu)
     );
 
     ReservationStation #(NUM_RS_ENTRIES, ROB_WIDTH, PHY_REGS, 1) RS_LSU(
         .clk(clk),
         .rst(rst),
         .flush(flush),
+        .stall_dispatch(stall_dispatch),
         .PRF_valid(PRF_valid),
         .dispatch_instruction_0(rename_instruction_0),
         .rob_id_0(rob_id_0),
@@ -83,13 +103,15 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REGS = 64, PH
         .rob_id_1(rob_id_1),
         .dispatch_valid_1(dispatch_ls_valid_1),
         .issue_instruction(issue_instruction_ls),
-        .issue_valid(issue_ls_valid)
+        .issue_valid(issue_ls_valid),
+        .busy(busy_lsu)
     );
 
     ReservationStation #(NUM_RS_ENTRIES, ROB_WIDTH, PHY_REGS, 2) RS_BRU(
         .clk(clk),
         .rst(rst),
         .flush(flush),
+        .stall_dispatch(stall_dispatch),
         .PRF_valid(PRF_valid),
         .dispatch_instruction_0(rename_instruction_0),
         .rob_id_0(rob_id_0),
@@ -98,7 +120,8 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 8, ROB_WIDTH = 4, PHY_REGS = 64, PH
         .rob_id_1(rob_id_1),
         .dispatch_valid_1(dispatch_branch_valid_1),
         .issue_instruction(issue_instruction_branch),
-        .issue_valid(issue_branch_valid)
+        .issue_valid(issue_branch_valid),
+        .busy(busy_branch)
     );
 
     // for debug

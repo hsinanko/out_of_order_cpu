@@ -6,7 +6,9 @@ import typedef_pkg::*;
 module InstructionFetch #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
     input  logic                  clk,
     input  logic                  rst,
+    // PC Interface
     input  logic [ADDR_WIDTH-1:0] pc,
+    input  logic [4096*8-1:0]     instr_data,
     output logic [ADDR_WIDTH-1:0] instruction_addr_0,    // instruction address 0
     output logic [ADDR_WIDTH-1:0] instruction_addr_1,    // instruction address 1
     output logic [DATA_WIDTH-1:0] instruction_0,         // instruction 0 
@@ -39,6 +41,7 @@ module InstructionFetch #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
     );
 
     InstructionROM #(ADDR_WIDTH, DATA_WIDTH) instr_rom (
+        .instr_data(instr_data),
         .addr(pc),
         .predict_taken_0(predict_taken_0),
         .predict_target_0(predict_target_0),

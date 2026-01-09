@@ -5,11 +5,11 @@ import instruction_pkg::*;
 import typedef_pkg::*;
 
 module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 6)(
-    input  logic       clk,
-    input  logic       rst,
-    input  logic       flush,
+    input  logic                  clk,
+    input  logic                  rst,
+    input  logic                  flush,
     // rename/dispatch
-    input  [1:0] dispatch_valid,
+    input  [1:0]                 dispatch_valid,
     input  ROB_ENTRY_t           dispatch_rob_0,         // entry to be added
     output logic [ROB_WIDTH-1:0] rob_id_0,
     // second instruction
@@ -19,8 +19,10 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     // commit 
     input  logic                  commit_alu_valid,
     input  logic [ROB_WIDTH-1:0]  commit_alu_rob_id,
-    input  logic                  commit_ls_valid,
-    input  logic [ROB_WIDTH-1:0]  commit_ls_rob_id,
+    input  logic                  commit_load_valid,
+    input  logic [ROB_WIDTH-1:0]  commit_load_rob_id,
+    input  logic                  commit_store_valid,
+    input  logic [ROB_WIDTH-1:0]  commit_store_rob_id,
     input  logic                  commit_branch_valid,
     input  logic [ROB_WIDTH-1:0]  commit_branch_rob_id,
     input  logic                  commit_mispredict,
@@ -40,29 +42,35 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     output logic                 retire_store_valid, // retire store valid
     output logic                 retire_branch_valid,
     output logic                 retire_done_valid,
-    output logic [ROB_WIDTH-1:0] rob_debug
+    output logic [ROB_WIDTH-1:0] rob_debug,
+    output logic                 rob_full,
+    output logic                 rob_empty
 );
 
     ROB_ENTRY_t ROB [NUM_ROB_ENTRY-1:0]; // FIFO
     logic [NUM_ROB_ENTRY-1:0]ROB_FINISH; // check if this instruction is finished
 
-    logic [ROB_WIDTH-1:0] count;
+    logic [ROB_WIDTH:0] count;
     logic [ROB_WIDTH-1:0] head;
     logic [ROB_WIDTH-1:0] tail;
-
-    assign rob_id_0 = (dispatch_valid[0]) ? tail : 4'd0;
-    assign rob_id_1 = (dispatch_valid[1]) ? ((dispatch_valid[0]) ? tail + 4'd1 : tail) : 4'd0;
+    
+    assign rob_id_0 = (dispatch_valid[0]) ? tail : {ROB_WIDTH{1'b0}};
+    assign rob_id_1 = (dispatch_valid[1]) ? ((dispatch_valid[0]) ? tail + 4'd1 : tail) : {ROB_WIDTH{1'b0}};
     integer i;
+
+    assign rob_full = (count >= NUM_ROB_ENTRY-2);
+    assign rob_empty = (count == 0);
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
             for(i = 0; i < NUM_ROB_ENTRY; i = i + 1)begin
-                ROB[i].rd_arch        <= 'h0;
-                ROB[i].rd_phy_old     <= 'h0;
-                ROB[i].rd_phy_new     <= 'h0;
-                ROB[i].opcode         <= 'h0;
-                ROB[i].mispredict     <= 1'b0;
-                ROB[i].actual_target  <= 'h0;
-                ROB[i].actual_taken   <= 1'b0;
+                ROB[i].rd_arch        = 'h0;
+                ROB[i].rd_phy_old     = 'h0;
+                ROB[i].rd_phy_new     = 'h0;
+                ROB[i].opcode         = 'h0;
+                ROB[i].actual_target  = 'h0;
+                ROB[i].actual_taken   = 1'b0;
+                ROB[i].update_pc      = 'h0;
+                ROB[i].mispredict     = 1'b0;
             end
             count <= 0;
             tail  <= 0;
@@ -87,6 +95,11 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
             tail      <= tail + 1;
             count     <= count + 1;
         end
+        else if(ROB_FINISH[head]) begin
+            // when committing instructions
+            tail  <= tail;
+            count <= count - 1;
+        end
         else begin
             tail  <= tail;
             count <= count;
@@ -104,8 +117,11 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
             if(commit_alu_valid) begin
                 ROB_FINISH[commit_alu_rob_id] <= 1'b1;
             end
-            if(commit_ls_valid) begin
-                ROB_FINISH[commit_ls_rob_id] <= 1'b1;
+            if(commit_load_valid) begin
+                ROB_FINISH[commit_load_rob_id] <= 1'b1;
+            end
+            if(commit_store_valid) begin
+                ROB_FINISH[commit_store_rob_id] <= 1'b1;
             end
             if(commit_branch_valid) begin
                 ROB_FINISH[commit_branch_rob_id]        <= 1'b1;
@@ -151,7 +167,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
             isFlush <= 1'b0;
         end
         else begin
-            if(ROB_FINISH[head] && isBranch) begin
+            if(ROB_FINISH[head] && (isBranch || isJump)) begin
                 isFlush  <= ROB[head].mispredict;
                 targetPC <= ROB[head].actual_target;
             end
@@ -172,6 +188,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
             retire_pr_valid     = 1'b0;
             retire_store_valid  = 1'b0;
             retire_branch_valid = 1'b0;
+            retire_done_valid   = 1'b0;
         end
         else if(ROB_FINISH[head]) begin
             rob_debug = head;
@@ -185,7 +202,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
                 retire_pr_valid     = 1'b1;
                 retire_store_valid  = 1'b0;
                 retire_branch_valid = 1'b0;
-                retire_done_valid   = 1'b0;
+                retire_done_valid         = 1'b0;
             end
             else if(isLoad) begin
                 rd_arch_commit      = ROB[head].rd_arch;
@@ -230,7 +247,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
                 update_btb_pc       = ROB[head].update_pc;
                 update_btb_taken    = ROB[head].actual_taken;
                 update_btb_target   = ROB[head].actual_target;
-                retire_pr_valid     = 1'b1;
+                retire_pr_valid     = (rd_arch_commit != 'h0) ? 1'b1 : 1'b0;
                 retire_store_valid  = 1'b0;
                 retire_branch_valid = 1'b1;
                 retire_done_valid   = 1'b0;
@@ -259,6 +276,18 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
                 retire_branch_valid = 1'b0;
                 retire_done_valid   = 1'b0;
             end
+        end
+        else begin
+            rd_arch_commit      = 'h0;
+            rd_phy_old_commit   = 'h0;
+            rd_phy_new_commit   = 'h0;
+            update_btb_pc       = 'h0;
+            update_btb_taken    = 1'b0;
+            update_btb_target   = 'h0;
+            retire_pr_valid     = 1'b0;
+            retire_store_valid  = 1'b0;
+            retire_branch_valid = 1'b0;
+            retire_done_valid   = 1'b0;
         end
     end
     

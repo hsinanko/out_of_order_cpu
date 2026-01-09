@@ -9,12 +9,16 @@ PKG = \
 		../src/package/info_pkg.sv \
 		../src/package/debug_pkg.sv
 COM = \
-		../src/common/Front_RAT.sv\
 		../src/common/Back_RAT.sv \
+		../src/common/Control.sv \
+		../src/common/DataMemory.sv \
+		../src/common/Freelist.sv \
+		../src/common/Front_RAT.sv\
 		../src/common/Memory.sv \
-		../src/common/ReorderBuffer.sv \
 		../src/common/PhysicalRegister.sv \
-		../src/common/Freelist.sv
+		../src/common/ReorderBuffer.sv
+		
+		
 IF = \
 		../src/Fetch/BTB.sv \
 		../src/Fetch/InstructionROM.sv \
@@ -32,13 +36,14 @@ EXE = \
 		../src/Issue/Execution/ALUUnit/ALUControl.sv \
 		../src/Issue/Execution/ALUUnit/ALU.sv \
 		../src/Issue/Execution/BranchUnit/BranchUnit.sv \
-		../src/Issue/Execution/MEMUnit/MEMUnit.sv \
+		../src/Issue/Execution/MEMUnit/AddressGenerator.sv \
+		../src/Issue/IssueFIFO.sv \
 		../src/Issue/Issue.sv \
 		../src/Issue/Execution/Execution.sv
 WB = \
-		../src/WriteBack/WriteBack.sv \
-		../src/WriteBack/FIFO.sv \
-		../src/WriteBack/StoreQueue.sv
+		../src/WriteBack/LoadStoreQueue.sv \
+		../src/WriteBack/WriteBack.sv
+
 TB ?= IssueExecution_tb
 VFLAGS = --binary -sv --trace -Wall -Wno-fatal \
 						-o  $(TB) \
@@ -49,17 +54,27 @@ VFLAGS = --binary -sv --trace -Wall -Wno-fatal \
 							$(EXE) \
 							$(WB)
 
-all: test
 
+TEST ?= fibonacci
 
+all: compile test
+
+compile:
+	riscv32-unknown-elf-gcc \
+			-march=rv32i \
+			-mabi=ilp32 \
+			-nostdlib \
+			-Ttext=0x0 \
+			../resources/$(TEST).S \
+			-o test.elf
+	riscv32-unknown-elf-objcopy -O binary test.elf test.bin
+	xxd -p -c 1 test.bin > ../resources/mem.hex
 test:
 	$(VERILATOR)  $(VFLAGS) $(TB).sv
 	./obj_dir/$(TB) +trace
 
 clean:
-	rm -rf obj_dir
-	rm -f *.vcd
 	rm -f *.txt
 	rm -rf build
-	
+	rm -f  test.elf test.bin
 .PHONY: test clean

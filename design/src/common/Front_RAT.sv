@@ -5,6 +5,7 @@ module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     input  logic clk,
     input  logic rst,
     input  logic flush,
+    input  logic done,
     // first instruction
     input  logic [1:0]instr_valid,      // instr_valid[0] = first instruction valid, instr_valid[1] = second instruction valid
     input  logic [4:0] rs1_arch_0,      // architected register address
@@ -23,50 +24,23 @@ module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     output logic [PHY_WIDTH-1:0] rs2_phy_1,
     output logic [PHY_WIDTH-1:0] rd_phy_1,
     // BACK_RAT will handle commit updates
-    input  logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat
+    input  logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat,
+    // ======== for debugging output =================
+    output logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out
 );
 
     // Register Alias Table (RAT)
     logic [PHY_WIDTH-1:0] FRONT_RAT [0:ARCH_REGS-1];
     logic [PHY_WIDTH-1:0] rat_tmp [0:ARCH_REGS-1];
-    integer i;
 
-    logic [PHY_WIDTH-1:0] front_rat [0:ARCH_REGS-1];
-    // genvar j;
-    // generate
-    //     for(j = 0; j < ARCH_REGS; j = j + 1) begin : gen_front_rat
-    //         // continuous assignment for each slice of the packed output
-    //         //assign front_rat[j*PHY_WIDTH +: PHY_WIDTH] = FRONT_RAT[j];
-    //         assign front_rat[j] = FRONT_RAT[j];
-    //     end
-    // endgenerate
-    // always_comb begin
+    // For debugging: output FRONT_RAT contents
+    genvar j;
+    generate
+        for (j = 0; j < ARCH_REGS; j = j + 1) begin : gen_front_rat_out
+            assign front_rat_out[(j+1)*PHY_WIDTH-1 -: PHY_WIDTH] = FRONT_RAT[j];
+        end
+    endgenerate
 
-    //     // start from current RAT
-    //     for (i = 0; i < ARCH_REGS; i++)
-    //         rat_tmp[i] = FRONT_RAT[i];
-    //     // -------- Slot 0 rename --------
-
-    //     rs1_phy_0 = FRONT_RAT[rs1_arch_0];
-    //     rs2_phy_0 = FRONT_RAT[rs2_arch_0];
-
-    //     if (instr_valid[0]) begin
-    //         rat_tmp[rd_arch_0] = rd_phy_new_0;
-    //         rd_phy_0  = rat_tmp[rd_arch_0];
-    //     end
-
-    //     // -------- Slot 1 rename --------
-
-    //     rs1_phy_1 = (instr_valid[0] && rd_arch_0 == rs1_arch_1) ? rat_tmp[rs1_arch_1] : FRONT_RAT[rs1_arch_1];
-    //     rs2_phy_1 = (instr_valid[0] && rd_arch_0 == rs2_arch_1) ? rat_tmp[rs2_arch_1] : FRONT_RAT[rs2_arch_1];
-        
-
-    //     if (instr_valid[1]) begin
-    //         rat_tmp[rd_arch_1] = rd_phy_new_1;
-    //         rd_phy_1  = rat_tmp[rd_arch_1];
-    //     end
-
-    // end
 
     always_latch begin
         rs1_phy_0 = FRONT_RAT[rs1_arch_0];
@@ -79,16 +53,20 @@ module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
 
 
 
-
+    integer i;
 
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
-            integer i;
             for (i = 0; i < ARCH_REGS; i++)
                 FRONT_RAT[i] <= i;
         end 
         else if(flush)begin
             // On flush, restore RAT from BACK_RAT
+            for (i = 0; i < ARCH_REGS; i++) begin
+                FRONT_RAT[i] <= back_rat[i*PHY_WIDTH +: PHY_WIDTH];
+            end
+        end
+        else if(done)begin
             for (i = 0; i < ARCH_REGS; i++) begin
                 FRONT_RAT[i] <= back_rat[i*PHY_WIDTH +: PHY_WIDTH];
             end
@@ -115,7 +93,7 @@ module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
 
     // For debugging: dump RAT contents at each clock cycle
     integer           mcd;
-
+       
     always_ff @(negedge clk) begin
         mcd = $fopen("../test/build/Front_RAT.txt","w");
 

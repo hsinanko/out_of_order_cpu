@@ -7,6 +7,7 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
     input  logic clk,
     input  logic rst,
     input  logic flush,
+    input  logic done,
     // ========= rename interface ====================
     input  logic [1:0]busy_valid,
     input  logic [REG_WIDTH-1:0]rd_phy_busy_0,   // mark rd_phy busy
@@ -38,9 +39,9 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
     input  logic [PHY_WIDTH-1:0]commit_rd_alu,                 // physical register address to commit
     input  logic [REG_WIDTH-1:0]commit_alu_result,     // data to writ
     // load/store commit interface
-    input  logic commit_ls_valid,                       // commit enable signal
-    input  logic [PHY_WIDTH-1:0]commit_rd_ls,                  // physical register address to commit
-    input  logic [REG_WIDTH-1:0]commit_mem_output, // data to write
+    input  logic commit_load_valid,                       // commit enable signal
+    input  logic [PHY_WIDTH-1:0]commit_rd_load,                  // physical register address to commit
+    input  logic [REG_WIDTH-1:0]commit_load_rdata, // data to write
     // branch commit interface
     input  logic commit_jump_valid,                   // commit enable 
     input  logic commit_branch_valid,
@@ -49,7 +50,11 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
     // ============= commit /retire interface ====================
     input logic [PHY_WIDTH-1:0]rd_phy_old_commit,
     input logic [PHY_WIDTH-1:0]rd_phy_new_commit,
-    input logic retire_valid
+    input logic retire_valid,
+    // === debugging interface =========================
+    output logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out,
+    output logic [PHY_REGS-1:0]PRF_busy_out,
+    output logic [PHY_REGS-1:0]PRF_valid_out
 );
     // Physical Register file
     // | Tag | Architected Reg | Data | Valid | Busy |
@@ -67,6 +72,15 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
         end
     endgenerate
 
+    // output PRF data for debugging
+    generate
+        for(j = 0; j < PHY_REGS; j = j + 1) begin : gen_prf_data_out
+            assign PRF_data_out[(j+1)*DATA_WIDTH-1 -: DATA_WIDTH] = PRF[j];
+            assign PRF_busy_out[j] = PRF_busy[j];
+            assign PRF_valid_out[j] = PRF_valid[j];
+        end
+    endgenerate
+
 
     // ========== execution stage (read data from PRF) =========
     assign rs1_data_alu = (alu_valid) ? PRF[rs1_phy_alu] : 'hx;
@@ -80,7 +94,7 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
 
     // ============== commit stage =====================
 
-    always_ff @(negedge clk or posedge rst)begin
+    always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
             for(i = 0; i < PHY_REGS; i = i+1)begin
                 PRF[i] <= 'h0;
@@ -90,6 +104,9 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
         end
         else if(flush) begin
             // On flush, reset PRF busy and valid bits
+            PRF_busy  <= 'h0;
+        end
+        else if(done) begin
             PRF_busy  <= 'h0;
         end
         else begin
@@ -107,13 +124,15 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
                 PRF[commit_rd_alu]       <= commit_alu_result;
                 PRF_valid[commit_rd_alu] <= 1;
             end
-            if(commit_ls_valid)begin
-                PRF[commit_rd_ls]       <= commit_mem_output;
-                PRF_valid[commit_rd_ls] <= 1;
+            if(commit_load_valid)begin
+                PRF[commit_rd_load]       <= commit_load_rdata;
+                PRF_valid[commit_rd_load] <= 1;
             end
             if(commit_jump_valid)begin
-                PRF[commit_rd_branch]       <= commit_nextPC;
-                PRF_valid[commit_rd_branch] <= 1;
+                if(commit_rd_branch != '0)begin
+                    PRF[commit_rd_branch]       <= commit_nextPC;
+                    PRF_valid[commit_rd_branch] <= 1;
+                end
             end
             if(commit_branch_valid)begin
                 PRF_valid[commit_rd_branch] <= 1;

@@ -42,5 +42,22 @@ package typedef_pkg;
         logic [ROB_WIDTH-1:0] age;
     } RS_ENTRY_t;
 
+    typedef struct packed {
+        logic [9:0] age;
+        logic [ADDR_WIDTH-1:0] addr;
+        logic [DATA_WIDTH-1:0] data;
+        logic valid;
+    } STORE_entry_t;
+
+    typedef struct packed {
+        logic [9:0] age;
+        logic [2:0] funct3;
+        logic [ADDR_WIDTH-1:0] addr;
+        logic [DATA_WIDTH-1:0] data;
+        logic [ROB_WIDTH-1:0]  rob_id;
+        logic [PHY_WIDTH-1:0]  rd_phy;
+        logic valid;
+    } LOAD_entry_t;
+
 endpackage
 

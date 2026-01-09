@@ -9,8 +9,8 @@ module FreeSlot #(parameter NUM_RS_ENTRIES = 8, TYPE = 0)(
     input logic flush,
     input logic valid_0,
     input logic valid_1,
-    output logic [4:0] free_0,           // physical register address to allocate
-    output logic [4:0] free_1,           // physical register address to allocate
+    output logic [$clog2(NUM_RS_ENTRIES)-1:0] free_0,           // physical register address to allocate
+    output logic [$clog2(NUM_RS_ENTRIES)-1:0] free_1,           // physical register address to allocate
     input logic  issue_free_valid,
     input logic [$clog2(NUM_RS_ENTRIES):0] issue_free
 );

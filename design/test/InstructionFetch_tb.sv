@@ -52,7 +52,7 @@ module InstructionFetch_Test;
 
     always @(posedge clk or posedge rst)begin
         if(rst) n_cycles <= 0;
-        else if(n_cycles < 10) n_cycles <= n_cycles + 1;
+        else n_cycles <= n_cycles + 1;
         else begin
             $display(" ========= Simulation ended =========");
             $finish;
