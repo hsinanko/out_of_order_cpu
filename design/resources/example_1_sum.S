@@ -10,7 +10,7 @@ prologue :
     sw s1,8(sp)
     sw s2,12(sp)
     li s0,1
-    li a0, 4
+    li a0, 120
     mv s1,a0 
     mv s2,zero
 loop_start :

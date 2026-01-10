@@ -48,7 +48,7 @@ module IssueExecution_tb();
 
 
 
-    logic [7:0]n_cycles;
+    logic [31:0]n_cycles;
     logic finished;
     always@(posedge clk)begin
         if(rst) begin
@@ -65,12 +65,14 @@ module IssueExecution_tb();
     always @(posedge clk or posedge rst)begin
         if(rst) 
             n_cycles <= 0;
-        else 
+        else begin
             n_cycles <= n_cycles + 1;
+            $display("Cycle: %0d", n_cycles);
+        end
     end
 
     always_comb begin
-        if(n_cycles == 400) begin
+        if(n_cycles >= 300) begin
             $display("\n\t=========== Max cycle reached, ending simulation ===========\n");
             $finish;
         end
@@ -90,7 +92,7 @@ module IssueExecution_tb();
                                    logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out);
 
         logic [PHY_WIDTH-1:0]front_rat[0:ARCH_REGS-1];
-        logic [PHY_WIDTH-1:0]prf [0:PHY_REGS-1];
+        logic [DATA_WIDTH-1:0]prf [0:PHY_REGS-1];
         integer i;
         $display("\n================ Architecture Register DATA ================"); 
         

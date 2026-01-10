@@ -23,7 +23,7 @@ module Control(
         end
         else begin
             // Stall fetch if ROB is full
-            if (rob_full || free_list_full) begin
+            if (rob_full || free_list_empty) begin
                 stall_fetch = 1'b1;
                 stall_dispatch = 1'b1;
             end

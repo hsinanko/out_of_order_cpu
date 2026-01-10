@@ -22,15 +22,15 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
     logic [$clog2(FREE_REG)-1:0] head;                         // points to the next free entry
     logic [$clog2(FREE_REG)-1:0] tail;                         // points to the next allocated entry
     logic [$clog2(FREE_REG):0] num_free;                     // number of free entries
-    
+    logic [$clog2(FREE_REG):0] num_free_reg;           
     logic [$clog2(FREE_REG)-1:0] tail_tmp;
 
     logic [PHY_REGS-1:0] is_busy;
 
     logic [PHY_WIDTH-1:0] freelist_rebuilt [0:FREE_REG-1];
-    assign full  = (num_free == 0);
-    assign empty = (num_free == FREE_REG);
-    always_latch begin
+    assign full  = (num_free_reg == FREE_REG);
+    assign empty = (num_free_reg == 0);
+    always_comb begin
         for(i = 0; i < PHY_REGS; i = i + 1)begin
             freelist_rebuilt[i] = FREELIST[i];
         end
@@ -47,6 +47,16 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
         end
     end
 
+    always_comb begin
+        if(rst || flush) num_free = FREE_REG;
+        else begin
+            num_free = num_free_reg;
+            if(retire_valid) num_free = num_free + 1;
+            if(valid == 2'b11) num_free = num_free - 2;
+            else if(valid == 2'b01 || valid == 2'b10) num_free = num_free - 1;
+        end
+    end
+
 
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
@@ -55,32 +65,30 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
             end
             head     <= 0;
             tail     <= FREE_REG-1;
-            num_free <= FREE_REG;
+            num_free_reg <= num_free;
         end
         else if(flush) begin
             // On flush, reset freelist to initial state
             FREELIST <= freelist_rebuilt;
             head     <= 0;
             tail     <= FREE_REG-1;
-            num_free <= FREE_REG;
+            num_free_reg <= num_free;
             is_busy  <= '0;
         end
         else begin
             // Allocate physical registers for renaming
+            num_free_reg <= num_free;
             if(valid == 2'b11) begin
                 head     <= head + 2;
-                num_free <= num_free - 2;
                 is_busy[FREELIST[head]]     <= 1'b1;
                 is_busy[FREELIST[head + 1]] <= 1'b1;
             end
             else if(valid == 2'b01 || valid == 2'b10) begin
                 head     <= head + 1;
-                num_free <= num_free -1;
                 is_busy[FREELIST[head]]     <= 1'b1;
             end
             else begin
                 head     <= head;
-                num_free <= num_free;
             end
 
 
@@ -89,10 +97,11 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
                 FREELIST[tail + 1] <= rd_phy_old_commit;
                 is_busy[rd_phy_new_commit] <= 1'b0;
                 tail     <= tail + 1;
-                num_free <= num_free + 1;
             end
+
         end
     end
+
 
     assign rd_phy_new_0 = (valid[0]) ? (FREELIST[head]): 'hx;        // +1 to skip PHY_ZERO
     assign rd_phy_new_1 = (valid[1]) ? ((valid[0]) ? (FREELIST[head + 1]) : (FREELIST[head])) : 'hx;    // +1 to skip PHY_ZERO

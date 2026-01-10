@@ -909,27 +909,27 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
 
     // ============= Debug Tasks ==================
 
-    always_ff @(posedge clk) begin
-        if(rst) 
-            $display("\n\n\t============ Resetting CPU ============\n\n");
-        else if(flush) begin
-            $display("\n\n\t============ Flush Triggered ============\n\n");
-        end
-        else begin
-            // print debug information at each stage
-            $display("*************************** Cycle %0d *************************", $time/10);
-            print_Fetch(instruction_valid_reg, instruction_addr_0_reg, instruction_0_reg, instruction_addr_1_reg, instruction_1_reg);
-            print_Rename(instruction_valid_reg, instruction_addr_0_reg, instruction_0_reg, instruction_addr_1_reg, instruction_1_reg,
-                         issue_alu_valid_reg, issue_instruction_alu_reg,
-                         issue_ls_valid_reg, issue_instruction_ls_reg,
-                         issue_branch_valid_reg, issue_instruction_branch_reg);
-            // print_Execution(alu_valid, ls_valid, branch_valid,
-            //                 alu_rob_id, alu_output,
-            //                 ls_rob_id, wdata_valid, waddr, wdata, rd_phy_ls, mem_rdata,
-            //                 branch_rob_id, nextPC);
-            print_Commit(retire_pr_valid_reg, retire_store_valid_reg, retire_branch_valid_reg,
-                         rd_arch_commit_reg, rd_phy_old_commit_reg, rd_phy_new_commit_reg);
-            $display("**************************** END *****************************\n");
-        end
-    end
+    // always_ff @(posedge clk) begin
+    //     if(rst) 
+    //         $display("\n\n\t============ Resetting CPU ============\n\n");
+    //     else if(flush) begin
+    //         $display("\n\n\t============ Flush Triggered ============\n\n");
+    //     end
+    //     else begin
+    //         // print debug information at each stage
+    //         $display("*************************** Cycle %0d *************************", $time/10);
+    //         print_Fetch(instruction_valid_reg, instruction_addr_0_reg, instruction_0_reg, instruction_addr_1_reg, instruction_1_reg);
+    //         print_Rename(instruction_valid_reg, instruction_addr_0_reg, instruction_0_reg, instruction_addr_1_reg, instruction_1_reg,
+    //                      issue_alu_valid_reg, issue_instruction_alu_reg,
+    //                      issue_ls_valid_reg, issue_instruction_ls_reg,
+    //                      issue_branch_valid_reg, issue_instruction_branch_reg);
+    //         // print_Execution(alu_valid, ls_valid, branch_valid,
+    //         //                 alu_rob_id, alu_output,
+    //         //                 ls_rob_id, wdata_valid, waddr, wdata, rd_phy_ls, mem_rdata,
+    //         //                 branch_rob_id, nextPC);
+    //         print_Commit(retire_pr_valid_reg, retire_store_valid_reg, retire_branch_valid_reg,
+    //                      rd_arch_commit_reg, rd_phy_old_commit_reg, rd_phy_new_commit_reg);
+    //         $display("**************************** END *****************************\n");
+    //     end
+    // end
 endmodule

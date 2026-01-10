@@ -19,49 +19,55 @@ module FreeSlot #(parameter NUM_RS_ENTRIES = 8, TYPE = 0)(
     logic [$clog2(NUM_RS_ENTRIES)-1:0] head;                         // points to the next free entry
     logic [$clog2(NUM_RS_ENTRIES)-1:0] tail;                         // points to the next allocated entry
     logic [$clog2(NUM_RS_ENTRIES):0] num_free;                     // number of free entries
+    logic [$clog2(NUM_RS_ENTRIES):0] num_free_reg;
     integer i;
+
+    always_comb begin
+        if(rst || flush) num_free = NUM_RS_ENTRIES;
+        else begin
+            num_free = num_free_reg;
+            if(valid_0 && valid_1) num_free = num_free - 2;
+            else if(valid_0 || valid_1) num_free = num_free - 1;
+        end
+    end
+
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
             
             for (i = 0; i < NUM_RS_ENTRIES; i = i + 1) begin 
                 FREESLOT[i] <= i; 
             end
-            head        <= 0;
-            tail        <= NUM_RS_ENTRIES - 1;
-            num_free    <= NUM_RS_ENTRIES;
+            head         <= 0;
+            tail         <= NUM_RS_ENTRIES - 1;
+            num_free_reg <= num_free;
         end
         else if(flush) begin
             // On flush, reset head and tail pointers
             for (i = 0; i < NUM_RS_ENTRIES; i = i + 1) begin 
                 FREESLOT[i] <= i; 
             end
-            head     <= 0;
-            tail     <= NUM_RS_ENTRIES - 1;
-            num_free <= NUM_RS_ENTRIES;
+            head         <= 0;
+            tail         <= NUM_RS_ENTRIES - 1;
+            num_free_reg <= num_free;
         end
         else begin
             // Allocate physical registers for renaming
             if(valid_0 && valid_1) begin
                 head     <= head + 2;
-                num_free <= num_free - 2;
             end
             else if(valid_0 && !valid_1) begin
                 head     <= head + 1;
-                num_free <= num_free -1;
             end
             else if(!valid_0 && valid_1) begin
                 head     <= head + 1;
-                num_free <= num_free - 1;
             end
             else begin
                 head     <= head;
-                num_free <= num_free;
             end
 
             if(issue_free_valid) begin
                 FREESLOT[tail + 1] <= issue_free; // -1 to skip PHY_ZERO
                 tail               <= tail + 1;
-                num_free           <= num_free + 1;
             end
         end
     end

@@ -94,17 +94,22 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
 
 
     always_comb begin
-        case(instr_0.opcode)
-            STORE: instr_valid[0] = 1'b0;
-            BRANCH: instr_valid[0] = 1'b0;
-            default: instr_valid[0] = instruction_valid[0];
-        endcase
+        if(stall_dispatch) begin
+            instr_valid = 2'b00;
+        end
+        else begin
+            case(instr_0.opcode)
+                STORE: instr_valid[0] = 1'b0;
+                BRANCH: instr_valid[0] = 1'b0;
+                default: instr_valid[0] = instruction_valid[0];
+            endcase
 
-        case(instr_1.opcode)
-            STORE: instr_valid[1] = 1'b0;
-            BRANCH: instr_valid[1] = 1'b0;
-            default: instr_valid[1] = instruction_valid[1];
-        endcase
+            case(instr_1.opcode)
+                STORE: instr_valid[1] = 1'b0;
+                BRANCH: instr_valid[1] = 1'b0;
+                default: instr_valid[1] = instruction_valid[1];
+            endcase
+        end
     end
 
 
@@ -126,8 +131,18 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
 
     //=========== Physical Register File =================
     // Physical Register File outputs
-    assign busy_valid[0] = (!flush && instruction_valid[0] && isRename_0);
-    assign busy_valid[1] = (!flush && instruction_valid[1] && isRename_1);
+    always_comb begin
+        if(flush) begin
+            busy_valid = 2'b00;
+        end
+        else if(stall_dispatch) begin
+            busy_valid = 2'b00;
+        end
+        else begin
+            busy_valid[0] = (instruction_valid[0] && isRename_0);
+            busy_valid[1] = (instruction_valid[1] && isRename_1);
+        end
+    end
     assign rd_phy_busy_0 = (busy_valid[0]) ? rd_phy_new_0 : 'h0;
     assign rd_phy_busy_1 = (busy_valid[1]) ? rd_phy_new_1 : 'h0;
 
