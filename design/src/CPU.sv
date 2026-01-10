@@ -10,12 +10,12 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     input logic rst,
     input logic [ADDR_WIDTH-1:0] boot_pc,
     output logic done,
+    // === Debugging Interface ==================
     output logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out,
     output logic [PHY_REGS-1:0]PRF_busy_out,
     output logic [PHY_REGS-1:0]PRF_valid_out,
     output logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out
 );
-
 
     // ============= Flush Logic ===================
     logic flush;
@@ -44,6 +44,10 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
             done <= done;
     end
     // ============= Instruction Fetch ===================
+
+    logic [ADDR_WIDTH-1:0]pc;
+    logic pc_valid;
+
     logic [ADDR_WIDTH-1:0]instruction_addr_0, instruction_addr_1;
     logic [DATA_WIDTH-1:0]instruction_0, instruction_1;
     logic [1:0] instruction_valid;
@@ -56,6 +60,15 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     logic [ADDR_WIDTH-1:0] update_pc;
     logic update_taken;
     logic [ADDR_WIDTH-1:0] update_target;
+
+    logic [ADDR_WIDTH-1:0]instruction_addr_0_reg, instruction_addr_1_reg;
+    logic [DATA_WIDTH-1:0]instruction_0_reg, instruction_1_reg;
+    logic [1:0] instruction_valid_reg;
+    logic predict_taken_0_reg;
+    logic [ADDR_WIDTH-1:0] predict_target_0_reg;
+
+    logic predict_taken_1_reg;
+    logic [ADDR_WIDTH-1:0] predict_target_1_reg;
 
     // ============= Decode / Rename Stage ==============
     logic [PHY_WIDTH-1:0] rd_phy_old_0, rd_phy_old_1;
@@ -83,25 +96,10 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     RS_ENTRY_t issue_instruction_alu, issue_instruction_ls, issue_instruction_branch;
     logic issue_alu_valid, issue_ls_valid, issue_branch_valid;
 
+    RS_ENTRY_t issue_instruction_alu_reg, issue_instruction_ls_reg, issue_instruction_branch_reg;
+    logic issue_alu_valid_reg, issue_ls_valid_reg, issue_branch_valid_reg;
+
     // ============ Issue / Execution Stage ==================
-
-    logic alu_valid;
-    logic ls_valid;
-    logic branch_valid;
-    logic [PHY_WIDTH-1:0] rs1_phy_alu;
-    logic [PHY_WIDTH-1:0] rs2_phy_alu;
-    logic [DATA_WIDTH-1:0] rs1_data_alu;
-    logic [DATA_WIDTH-1:0] rs2_data_alu;
-    logic [PHY_WIDTH-1:0] rs1_phy_ls;
-    logic [PHY_WIDTH-1:0] rs2_phy_ls;
-    logic [DATA_WIDTH-1:0] rs1_data_ls;
-    logic [DATA_WIDTH-1:0] rs2_data_ls;
-    logic [PHY_WIDTH-1:0] rs1_phy_branch;
-    logic [PHY_WIDTH-1:0] rs2_phy_branch;
-    logic [DATA_WIDTH-1:0] rs1_data_branch;
-    logic [DATA_WIDTH-1:0] rs2_data_branch;
-
-
     logic [ROB_WIDTH-1:0]  alu_rob_id;
     logic [DATA_WIDTH-1:0] alu_output;
     logic [PHY_WIDTH-1:0]  rd_phy_alu;
@@ -117,55 +115,43 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     logic                  load_valid;
     logic                  busy_lsu;
 
-    logic [ROB_WIDTH-1:0] branch_rob_id;
-    logic actual_taken;
-    logic mispredict;
+    logic [ROB_WIDTH-1:0]  branch_rob_id;
+    logic                  actual_taken;
     logic [ADDR_WIDTH-1:0] jumpPC;
     logic [ADDR_WIDTH-1:0] nextPC;
-    logic [PHY_WIDTH-1:0] rd_phy_branch;
-    logic isJump;
-    logic busy_branch;
+    logic [PHY_WIDTH-1:0]  rd_phy_branch;
+    logic                  isJump;
+    logic                  mispredict;
+    logic                  busy_branch;
+
+
+    logic [ROB_WIDTH-1:0]  alu_rob_id_reg;
+    logic [DATA_WIDTH-1:0] alu_output_reg;
+    logic [PHY_WIDTH-1:0]  rd_phy_alu_reg;
+    logic                  alu_valid_reg;
+    // Load/Store outputs
+    logic [ADDR_WIDTH-1:0] store_waddr_reg;
+    logic [DATA_WIDTH-1:0] store_wdata_reg;
+    logic [ROB_WIDTH-1:0]  store_rob_id_reg;
+    logic                  store_valid_reg;
+    logic [2:0]            load_funct3_reg;
+    logic [ADDR_WIDTH-1:0] load_raddr_reg;
+    logic [ROB_WIDTH-1:0]  load_rob_id_reg;
+    logic [PHY_WIDTH-1:0]  load_rd_phy_reg;
+    logic                  load_valid_reg;
+    // Branch outputs
+    logic [ROB_WIDTH-1:0]  branch_rob_id_reg;
+    logic                  actual_taken_reg;
+    logic [ADDR_WIDTH-1:0] jumpPC_reg;
+    logic [ADDR_WIDTH-1:0] update_pc_reg;
+    logic [ADDR_WIDTH-1:0] nextPC_reg;
+    logic [PHY_WIDTH-1:0]  rd_phy_branch_reg;
+    logic                  isJump_reg;
+    logic                  mispredict_reg;
+    logic                  branch_valid_reg;
 
 
     // ============= Write Back Stage ==================
-    logic                  commit_alu_valid_reg;
-    logic [ROB_WIDTH-1:0]  commit_alu_rob_id_reg;
-    logic [PHY_WIDTH-1:0]  commit_rd_alu_reg;
-    logic [DATA_WIDTH-1:0] commit_alu_result_reg;
-    logic [1:0]            commit_load_valid_reg;
-    logic [ROB_WIDTH-1:0]  commit_load_rob_id_reg;
-    logic [PHY_WIDTH-1:0]  commit_rd_load_reg;
-    logic [DATA_WIDTH-1:0] commit_load_rdata_reg;
-    logic                  commit_store_valid_reg;
-    logic [ROB_WIDTH-1:0]  commit_store_rob_id_reg;
-    logic                  commit_branch_valid_reg;
-    logic                  commit_jump_valid_reg;
-    logic [ROB_WIDTH-1:0]  commit_branch_rob_id_reg;
-    logic [PHY_WIDTH-1:0]  commit_rd_branch_reg;
-    logic [ADDR_WIDTH-1:0] commit_nextPC_reg;
-    logic                  commit_mispredict_reg;
-    logic [ADDR_WIDTH-1:0] commit_actual_target_reg;
-    logic                  commit_actual_taken_reg;
-    logic [ADDR_WIDTH-1:0] commit_update_pc_reg;
-    // ============= Physical Register File ==================
-    logic [PHY_REGS-1:0]PRF_busy;
-    logic [PHY_REGS-1:0]PRF_valid;
-    logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat;
-    // ============= Control Unit ==================
-    logic stall_fetch;
-    logic stall_dispatch;
-    // ================== Memory Interface ==================
-    // memory port
-    logic mem_rd_en;
-    logic [ADDR_WIDTH-1:0] mem_raddr;
-    logic [DATA_WIDTH-1:0] mem_rdata;
-    logic mem_rdata_valid;
-    logic mem_write_en;
-    logic [ADDR_WIDTH-1:0] mem_waddr;
-    logic [DATA_WIDTH-1:0] mem_wdata;
-    
-
-    // ============ Reorder Buffer ==================
     logic                  commit_alu_valid;
     logic [ROB_WIDTH-1:0]  commit_alu_rob_id;
     logic [PHY_WIDTH-1:0]  commit_rd_alu;
@@ -188,7 +174,62 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     logic [ADDR_WIDTH-1:0] commit_actual_target;
     logic                  commit_actual_taken;
     logic [ADDR_WIDTH-1:0] commit_update_pc;
+    // Write Back registers
+    logic                  commit_alu_valid_reg;
+    logic [ROB_WIDTH-1:0]  commit_alu_rob_id_reg;
+    logic [PHY_WIDTH-1:0]  commit_rd_alu_reg;
+    logic [DATA_WIDTH-1:0] commit_alu_result_reg;
+    logic [1:0]            commit_load_valid_reg;
+    logic [ROB_WIDTH-1:0]  commit_load_rob_id_reg;
+    logic [PHY_WIDTH-1:0]  commit_rd_load_reg;
+    logic [DATA_WIDTH-1:0] commit_load_rdata_reg;
+    logic                  commit_store_valid_reg;
+    logic [ROB_WIDTH-1:0]  commit_store_rob_id_reg;
+    logic                  commit_branch_valid_reg;
+    logic                  commit_jump_valid_reg;
+    logic [ROB_WIDTH-1:0]  commit_branch_rob_id_reg;
+    logic [PHY_WIDTH-1:0]  commit_rd_branch_reg;
+    logic [ADDR_WIDTH-1:0] commit_nextPC_reg;
+    logic                  commit_mispredict_reg;
+    logic [ADDR_WIDTH-1:0] commit_actual_target_reg;
+    logic                  commit_actual_taken_reg;
+    logic [ADDR_WIDTH-1:0] commit_update_pc_reg;
+    // ============= Physical Register File ==================
+    logic [PHY_REGS-1:0]PRF_busy;
+    logic [PHY_REGS-1:0]PRF_valid;
 
+
+    logic alu_valid;
+    logic ls_valid;
+    logic branch_valid;
+    logic [PHY_WIDTH-1:0] rs1_phy_alu;
+    logic [PHY_WIDTH-1:0] rs2_phy_alu;
+    logic [DATA_WIDTH-1:0] rs1_data_alu;
+    logic [DATA_WIDTH-1:0] rs2_data_alu;
+    logic [PHY_WIDTH-1:0] rs1_phy_ls;
+    logic [PHY_WIDTH-1:0] rs2_phy_ls;
+    logic [DATA_WIDTH-1:0] rs1_data_ls;
+    logic [DATA_WIDTH-1:0] rs2_data_ls;
+    logic [PHY_WIDTH-1:0] rs1_phy_branch;
+    logic [PHY_WIDTH-1:0] rs2_phy_branch;
+    logic [DATA_WIDTH-1:0] rs1_data_branch;
+    logic [DATA_WIDTH-1:0] rs2_data_branch;
+
+    // ============ Back RAT ==================
+    logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat;
+    // ============= Control Unit ==================
+    logic stall_fetch;
+    logic stall_dispatch;
+    // ================== Data Memory Interface (in the Unified Memory) ==================
+    // memory port
+    logic mem_rd_en;
+    logic [ADDR_WIDTH-1:0] mem_raddr;
+    logic [DATA_WIDTH-1:0] mem_rdata;
+    logic mem_rdata_valid;
+    logic mem_write_en;
+    logic [ADDR_WIDTH-1:0] mem_waddr;
+    logic [DATA_WIDTH-1:0] mem_wdata;
+    // ============ Reorder Buffer ==================
     logic rob_full, rob_empty;
     // ============= Retire Stage ==================
 
@@ -219,44 +260,41 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
 
 
     //============== Unified Instruction/Data Memory ==================
-    logic [4096*8-1:0] instr_data;
-    logic [4096*8-1:0] init_data;
     
-    Memory #(32'h0000_0000, 32'h0000_1000, ADDR_WIDTH, DATA_WIDTH) UnifiedMemory(
-        .instr_data(instr_data),
-        .data_data(init_data)
-    );
-
-
-    // ============= Instruction Fetch ===================
-    logic [ADDR_WIDTH-1:0]pc;
-    logic [ADDR_WIDTH-1:0]instruction_addr_0_reg, instruction_addr_1_reg;
-    logic [DATA_WIDTH-1:0]instruction_0_reg, instruction_1_reg;
-    logic [1:0] instruction_valid_reg;
-    logic predict_taken_0_reg;
-    logic [ADDR_WIDTH-1:0] predict_target_0_reg;
-
-    logic predict_taken_1_reg;
-    logic [ADDR_WIDTH-1:0] predict_target_1_reg;
-    InstructionFetch #(ADDR_WIDTH, DATA_WIDTH) Fetch(
+    Memory #(INSTR_ADDRESS, DATA_ADDRESS, INSTR_MEM_SIZE, DATA_MEM_SIZE, ADDR_WIDTH, DATA_WIDTH) UnifiedMemory(
         .clk(clk),
         .rst(rst),
         .pc(pc),
-        .instr_data(instr_data),
+        .predict_taken_0(predict_taken_0),
+        .predict_target_0(predict_target_0),
         .instruction_addr_0(instruction_addr_0),
         .instruction_addr_1(instruction_addr_1),
         .instruction_0(instruction_0),
         .instruction_1(instruction_1),
         .instruction_valid(instruction_valid),
-        // BTB Interface
+        .mem_write_en(mem_write_en),
+        .waddr(mem_waddr),
+        .wdata(mem_wdata),
+        .mem_rd_en(mem_rd_en),
+        .raddr(mem_raddr),
+        .rdata(mem_rdata),
+        .rdata_valid(mem_rdata_valid)
+    );
+
+
+    BTB #(ADDR_WIDTH, BTB_ENTRIES, BTB_WIDTH) BTB_unit(
+        .clk(clk),
+        .rst(rst),
+        .pc(pc),
+        .pc_valid(pc_valid),
         .predict_taken_0(predict_taken_0),
         .predict_target_0(predict_target_0),
         .predict_taken_1(predict_taken_1),
         .predict_target_1(predict_target_1),
-        .update_valid(retire_branch_valid_reg),
-        .update_btb_pc(update_btb_pc_reg),
-        .update_btb_taken(update_btb_taken_reg),
-        .update_btb_target(update_btb_target_reg)
+        .update_valid(update_valid),
+        .update_btb_pc(update_btb_pc),
+        .update_btb_taken(update_btb_taken),
+        .update_btb_target(update_btb_target)
     );
 
     always_ff @(posedge clk or posedge rst)begin
@@ -312,8 +350,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
 
     // ============= Decode / Rename Stage ==============
 
-    RS_ENTRY_t issue_instruction_alu_reg, issue_instruction_ls_reg, issue_instruction_branch_reg;
-    logic issue_alu_valid_reg, issue_ls_valid_reg, issue_branch_valid_reg;
+
 
     Rename #(ADDR_WIDTH, DATA_WIDTH, REG_WIDTH, ARCH_REGS, PHY_REGS, NUM_RS_ENTRIES, ROB_WIDTH, PHY_WIDTH) Rename_Unit (
         .clk(clk),
@@ -450,30 +487,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .busy_branch(busy_branch)
     );
 
-    logic [ROB_WIDTH-1:0]alu_rob_id_reg;
-    logic [DATA_WIDTH-1:0] alu_output_reg;
-    logic [PHY_WIDTH-1:0]rd_phy_alu_reg;
-    logic alu_valid_reg;
-    // Load/Store outputs
-    logic [ADDR_WIDTH-1:0] store_waddr_reg;
-    logic [DATA_WIDTH-1:0] store_wdata_reg;
-    logic [ROB_WIDTH-1:0] store_rob_id_reg;
-    logic store_valid_reg;
-    logic [2:0] load_funct3_reg;
-    logic [ADDR_WIDTH-1:0] load_raddr_reg;
-    logic [ROB_WIDTH-1:0] load_rob_id_reg;
-    logic [PHY_WIDTH-1:0]load_rd_phy_reg;
-    logic load_valid_reg;
-    // Branch outputs
-    logic [ROB_WIDTH-1:0]branch_rob_id_reg;
-    logic actual_taken_reg;
-    logic [ADDR_WIDTH-1:0] jumpPC_reg;
-    logic [ADDR_WIDTH-1:0] update_pc_reg;
-    logic [ADDR_WIDTH-1:0] nextPC_reg;
-    logic [PHY_WIDTH-1:0]rd_phy_branch_reg;
-    logic isJump_reg;
-    logic mispredict_reg;
-    logic branch_valid_reg;
+
 
     always_ff @(posedge clk or posedge rst) begin
         if(rst) begin
@@ -687,23 +701,6 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         end
     end 
 
-    // ============= Memory ==============
-
-
-    DataMemory #(ADDR_WIDTH, DATA_WIDTH, DATA_MEM_SIZE) DataMemory(
-        .clk(clk),
-        .rst(rst),
-        .init_data(init_data),
-        .mem_write_en(mem_write_en),
-        .waddr(mem_waddr),
-        .wdata(mem_wdata),
-        .mem_rd_en(mem_rd_en),
-        .raddr(mem_raddr),
-        .rdata(mem_rdata),
-        .rdata_valid(mem_rdata_valid)
-    );
-
-
     // ============= Common ==================
     Front_RAT #(ARCH_REGS, PHY_WIDTH) front_rat (
         .clk(clk),
@@ -836,6 +833,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .rst(rst),
         .rob_full(rob_full),
         .rob_empty(rob_empty),
+        .pc_valid(pc_valid),
         .free_list_full(free_list_full),
         .free_list_empty(free_list_empty),
         .stall_fetch(stall_fetch),

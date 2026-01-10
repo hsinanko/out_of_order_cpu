@@ -6,7 +6,7 @@ import parameter_pkg::*;
 module DataMemory #(
     parameter DATA_WIDTH = 32,
     parameter ADDR_WIDTH = 32,
-    parameter DATA_MEM_SIZE = 1024
+    parameter DATA_MEM_SIZE = 4096
 ) (
     input  logic clk,
     input  logic rst,
@@ -20,7 +20,7 @@ module DataMemory #(
     output logic rdata_valid
 );
     // Simple memory array (word addressed)
-    logic [7:0] DataMem [0:(DATA_MEM_SIZE*4)-1];
+    logic [7:0] DataMem [0:DATA_MEM_SIZE-1];
 
     // byte offset within a word
     logic [1:0] memory_index;
@@ -38,8 +38,8 @@ module DataMemory #(
             DataMem[i] = init_data[i*8 +: 8];
     end
 
-    logic [$clog2(DATA_MEM_SIZE*4)-1:0] phys_waddr;
-    logic [$clog2(DATA_MEM_SIZE*4)-1:0] phys_raddr;
+    logic [$clog2(DATA_MEM_SIZE)-1:0] phys_waddr;
+    logic [$clog2(DATA_MEM_SIZE)-1:0] phys_raddr;
 
     assign phys_waddr = waddr[$clog2(DATA_MEM_SIZE)-1:0];
     assign phys_raddr = raddr[$clog2(DATA_MEM_SIZE)-1:0]; 

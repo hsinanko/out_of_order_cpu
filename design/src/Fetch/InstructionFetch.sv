@@ -47,12 +47,10 @@ module InstructionFetch #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
         .predict_target_0(predict_target_0),
         .instruction_0(instruction_0),
         .instruction_1(instruction_1),
-        .valid(instruction_valid)
+        .instruction_valid(instruction_valid)
     );
 
     assign instruction_addr_0 = pc;
     assign instruction_addr_1 = predict_target_0;
 
 endmodule 
-
-

@@ -1,4 +1,7 @@
 .DS_Store
 /design/test/build/
 /design/test/obj_dir/
+*.bin
+*.elf
+*.vcd
 o3o.*

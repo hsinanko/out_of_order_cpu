@@ -6,9 +6,11 @@ module InstructionROM #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
     input  logic [ADDR_WIDTH-1:0]  addr,           // Address input
     input  logic                   predict_taken_0, // Branch prediction signal
     input  logic [ADDR_WIDTH-1:0]  predict_target_0,
-    output logic [DATA_WIDTH-1:0]  instruction_0,   // Fetched Instruction
-    output logic [DATA_WIDTH-1:0]  instruction_1,
-    output logic [1:0]             valid
+    output logic [ADDR_WIDTH-1:0] instruction_addr_0,    // instruction address 0
+    output logic [ADDR_WIDTH-1:0] instruction_addr_1,    // instruction address 1
+    output logic [DATA_WIDTH-1:0] instruction_0,         // instruction 0 
+    output logic [DATA_WIDTH-1:0] instruction_1,         // instruction 1
+    output logic [1:0]            instruction_valid,
 );
 
 
@@ -32,11 +34,13 @@ module InstructionROM #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
                          instruction_memory[predict_target_0 + 1], instruction_memory[predict_target_0]};
           
         // valid signals
-        valid[0] = (addr + 4 <= 4096) ? 1 : 0;
-        valid[1] = (predict_target_0 + 4 <= 4096) ? 1 : 0;
+        instruction_valid[0] = (addr + 4 <= 4096) ? 1 : 0;
+        instruction_valid[1] = (predict_target_0 + 4 <= 4096) ? 1 : 0;
 
     end
 
+    assign instruction_addr_0 = addr;
+    assign instruction_addr_1 = predict_target_0;
 
 
 endmodule
