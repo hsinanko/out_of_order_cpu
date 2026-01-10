@@ -1,6 +1,5 @@
 `timescale 1ns/1ps
 
-import parameter_pkg::*;
 import typedef_pkg::*;
 
 module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, TYPE = 0)(

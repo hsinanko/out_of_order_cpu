@@ -1,8 +1,6 @@
 
 `timescale 1ns/1ps
 
-import parameter_pkg::*;
-
 module DataMemory #(
     parameter DATA_WIDTH = 32,
     parameter ADDR_WIDTH = 32,

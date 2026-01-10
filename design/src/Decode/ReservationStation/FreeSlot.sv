@@ -2,7 +2,6 @@
 // FreeSlot.sv
 // TYPE: ALU =0, LOAD/STORE=1, BRANCH=2
 
-import parameter_pkg::*;
 module FreeSlot #(parameter NUM_RS_ENTRIES = 8, TYPE = 0)(
     input logic clk, 
     input logic rst,

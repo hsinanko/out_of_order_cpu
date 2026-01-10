@@ -1,6 +1,5 @@
 `timescale 1ns / 1ps
 
-import parameter_pkg::*;
 import typedef_pkg::*;
 
 module InstructionFetch #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(

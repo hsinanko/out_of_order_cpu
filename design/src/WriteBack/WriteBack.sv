@@ -1,6 +1,5 @@
 `timescale 1ns/1ps
 
-import parameter_pkg::*;
 
 module WriteBack #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, ROB_WIDTH = 5, FIFO_DEPTH = 16)(
     input logic clk,
@@ -70,7 +69,7 @@ module WriteBack #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, RO
     output logic [DATA_WIDTH-1:0] mem_wdata 
 );
 
-    LoadStoreQueue #(.ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH), .QUEUE(FIFO_DEPTH)) LSQ (
+    LoadStoreQueue #(.ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH), .FIFO_DEPTH(FIFO_DEPTH)) LSQ (
         .clk(clk),
         .rst(rst),
         .flush(flush),

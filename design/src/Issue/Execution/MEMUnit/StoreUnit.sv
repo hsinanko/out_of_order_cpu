@@ -1,5 +1,4 @@
 `timescale 1ns/1ps
-import parameter_pkg::*;
 
 module StoreUnit #(ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5)(
     input  logic isStore,

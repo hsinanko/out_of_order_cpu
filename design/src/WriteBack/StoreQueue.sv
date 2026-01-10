@@ -1,8 +1,8 @@
 `timescale 1ns/1ps
-import parameter_pkg::*;
+
 import typedef_pkg::*;
 
-module StoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, QUEUE = 16)(
+module StoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH= 16)(
     input logic clk,
     input logic rst,
     input logic flush,
@@ -17,7 +17,7 @@ module StoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, QUEUE = 16)(
     output logic [DATA_WIDTH-1:0]mem_wdata
 );
     // Store Queue implementation here
-    FIFO #( .DATA_WIDTH(ADDR_WIDTH + DATA_WIDTH), .FIFO_DEPTH(QUEUE) ) store_queue (
+    FIFO #( .DATA_WIDTH(ADDR_WIDTH + DATA_WIDTH), .FIFO_DEPTH(FIFO_DEPTH) ) store_queue (
         .clk(clk),
         .rst(rst),
         .flush(flush),

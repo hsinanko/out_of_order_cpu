@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-import parameter_pkg::*;
+import instruction_pkg::*;
 module ALUControl(
     input logic [6:0] opcode,
     input logic [6:0] funct7,

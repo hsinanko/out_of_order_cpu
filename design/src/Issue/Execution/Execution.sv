@@ -1,6 +1,5 @@
 `timescale 1ns/1ps
 
-import parameter_pkg::*;
 import typedef_pkg::*;
 
 module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PHY_WIDTH = 6)(

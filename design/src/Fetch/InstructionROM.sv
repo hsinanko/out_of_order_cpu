@@ -1,5 +1,4 @@
 `timescale 1ns / 1ps
-import parameter_pkg::*;
 
 module InstructionROM #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, INSTR_MEM_SIZE = 4096)(
     input  logic [INSTR_MEM_SIZE*8-1:0]      instr_data,

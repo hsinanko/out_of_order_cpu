@@ -1,6 +1,5 @@
 `timescale 1ns/1ps
 
-import parameter_pkg::*;
 import instruction_pkg::*;
 import typedef_pkg::*;
 

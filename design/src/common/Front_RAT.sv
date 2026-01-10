@@ -1,5 +1,4 @@
 `timescale 1ns/1ps
-import parameter_pkg::*;
 
 module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     input  logic clk,

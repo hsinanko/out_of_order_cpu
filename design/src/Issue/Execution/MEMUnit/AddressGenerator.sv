@@ -50,12 +50,14 @@ module AddressGenerator #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH 
 
     always_comb begin
         if(isLoad)begin
+            load_funct3 = funct3;
             load_raddr  = addr;
             load_rob_id = rob_id;
             load_rd_phy = rd_phy;
             load_valid  = 1;
         end
         else begin
+            load_funct3 = 0;
             load_raddr  = 0;
             load_rob_id = 0;
             load_rd_phy = 0;

@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 import typedef_pkg::*;
-import parameter_pkg::*;
-module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARCH_REGS = 32, PHY_REGS = 64, NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_WIDTH = 6)(
+
+module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY_REGS = 64, NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_WIDTH = 6)(
     input  logic                  clk,
     input  logic                  rst,
     input  logic                  flush,

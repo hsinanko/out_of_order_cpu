@@ -5,7 +5,18 @@ import typedef_pkg::*;
 import instruction_pkg::*;
 import info_pkg::*;
 
-module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY_REGS = 64, PHY_WIDTH = 6, ROB_WIDTH = 5, NUM_RS_ENTRIES = 8)(
+module O3O_CPU #(parameter ADDR_WIDTH = 32, 
+                           DATA_WIDTH = 32,
+                           ARCH_REGS = 32,
+                           PHY_REGS = 64, 
+                           PHY_WIDTH = $clog2(PHY_REGS),  
+                           NUM_ROB_ENTRY = 32,
+                           ROB_WIDTH = $clog2(NUM_ROB_ENTRY),
+                           NUM_RS_ENTRIES = 8,
+                           BTB_ENTRIES = 16,
+                           BTB_WIDTH = $clog2(BTB_ENTRIES),
+                           FIFO_DEPTH = 16)
+(
     input logic clk,
     input logic rst,
     input logic [ADDR_WIDTH-1:0] boot_pc,
@@ -364,7 +375,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
 
 
 
-    Rename #(ADDR_WIDTH, DATA_WIDTH, REG_WIDTH, ARCH_REGS, PHY_REGS, NUM_RS_ENTRIES, ROB_WIDTH, PHY_WIDTH) Rename_Unit (
+    Rename #(ADDR_WIDTH, DATA_WIDTH, ARCH_REGS, PHY_REGS, NUM_RS_ENTRIES, ROB_WIDTH, PHY_WIDTH) Rename_Unit (
         .clk(clk),
         .rst(rst),
         .flush(flush),
@@ -853,7 +864,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .stall_dispatch(stall_dispatch)
     );
 
-    PhysicalRegister #(DATA_WIDTH, PHY_REGS) PhysicalRegisterFile(
+    PhysicalRegister #(PHY_REGS, PHY_WIDTH, DATA_WIDTH) PhysicalRegisterFile(
         .clk(clk),
         .rst(rst),
         .flush(flush),

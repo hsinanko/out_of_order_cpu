@@ -14,7 +14,7 @@ module InstructionDecode #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
         case(decoded_instruction.opcode)
             LOAD: begin
                 // Decode load instruction
-                decoded_instruction.immediate = instruction[31:20];
+                decoded_instruction.immediate = { {20{instruction[31]}}, instruction[31:20]};
                 decoded_instruction.rs1_addr  = instruction[19:15];
                 decoded_instruction.funct3    = instruction[14:12];
                 decoded_instruction.rd_addr   = instruction[11:7];

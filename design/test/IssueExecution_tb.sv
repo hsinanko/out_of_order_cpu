@@ -27,7 +27,18 @@ module IssueExecution_tb();
 
     always #5 clk = ~clk; // Clock generation
 
-    O3O_CPU #(ADDR_WIDTH, DATA_WIDTH, REG_WIDTH, PHY_REGS, PHY_WIDTH, ROB_WIDTH, NUM_RS_ENTRIES) dut_cpu (
+    O3O_CPU #(ADDR_WIDTH, 
+              DATA_WIDTH, 
+              ARCH_REGS,
+              PHY_REGS,
+              PHY_WIDTH,
+              NUM_ROB_ENTRY,
+              ROB_WIDTH,
+              NUM_RS_ENTRIES,
+              BTB_ENTRIES,
+              BTB_WIDTH,
+              FIFO_DEPTH) 
+    dut_cpu(
         .clk(clk),
         .rst(rst),
         .boot_pc(boot_pc),
@@ -109,7 +120,7 @@ module IssueExecution_tb();
             print_CPU_State(1);
             $finish;
         end
-        else if(n_cycles >= 30000) begin
+        else if(n_cycles >= 100000) begin
             $display("\n\t=========== Max cycle reached, ending simulation ===========\n");
             print_CPU_State(0);
             $finish;

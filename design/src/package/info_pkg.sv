@@ -122,7 +122,7 @@ package info_pkg;
     task print_Commit(logic retire_pr_valid_reg,
                       logic retire_store_valid_reg,
                       logic retire_branch_valid_reg,
-                      logic [REG_WIDTH-1:0] rd_arch_commit_reg,
+                      logic [4:0] rd_arch_commit_reg,
                       logic [PHY_WIDTH-1:0] rd_phy_old_commit_reg,
                       logic [PHY_WIDTH-1:0] rd_phy_new_commit_reg);
         $display("\n\t===============================================");

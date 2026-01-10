@@ -1,8 +1,8 @@
 `timescale 1ns/1ps
-import parameter_pkg::*;
-import typedef_pkg::*;
 
-module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, QUEUE = 16)(
+import typedef_pkg::*;
+import instruction_pkg::*;
+module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH = 16)(
     input clk,
     input rst,
     input flush,
@@ -48,7 +48,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, QUEUE = 16)(
     logic [$clog2(FIFO_DEPTH):0] load_count;
     logic isLoad, isSend;
      // Age counter
-    logic [9:0] current_age;
+    logic [31:0] current_age;
      // FIFO control signals
     assign store_full = (store_count == FIFO_DEPTH);
     assign store_empty = (store_count == 0);   
@@ -78,7 +78,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, QUEUE = 16)(
             head_store  <= 0;
             tail_store  <= 0;
             store_count <= 0;
-            for(i = 0; i < 16; i = i + 1) begin
+            for(i = 0; i < FIFO_DEPTH; i = i + 1) begin
                 StoreQueue[i].age   <= 0;
                 StoreQueue[i].addr  <= 0;
                 StoreQueue[i].data  <= 0;
@@ -89,7 +89,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, QUEUE = 16)(
             head_store  <= 0;
             tail_store  <= 0;
             store_count <= 0;
-            for(i = 0; i < 16; i = i + 1) begin
+            for(i = 0; i < FIFO_DEPTH; i = i + 1) begin
                 StoreQueue[i].age   <= 0;
                 StoreQueue[i].addr  <= 0;
                 StoreQueue[i].data  <= 0;
@@ -140,17 +140,18 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, QUEUE = 16)(
     assign isLoad  = load_valid && !load_full;
     assign isSend  = mem_rdata_valid && !load_empty;
 
-    assign load_full = (load_count == QUEUE);
+    assign load_full = (load_count == FIFO_DEPTH);
     assign load_empty = (load_count == 0);
     always_ff @(posedge clk or posedge rst) begin
         if(rst) begin
             head_load  <= 0;
             tail_load  <= 0;
             load_count <= 0;
-            for(i = 0; i < QUEUE; i = i + 1) begin
+            for(i = 0; i < FIFO_DEPTH; i = i + 1) begin
                 LoadQueue[i].age    <= 0;
                 LoadQueue[i].addr   <= 0;
                 LoadQueue[i].data   <= 0;
+                LoadQueue[i].funct3 <= 0;
                 LoadQueue[i].rob_id <= 0;
                 LoadQueue[i].rd_phy <= 0;
                 LoadQueue[i].valid  <= 1'b0;
@@ -160,10 +161,11 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, QUEUE = 16)(
             head_load  <= 0;
             tail_load  <= 0;
             load_count <= 0;
-            for(i = 0; i < QUEUE; i = i + 1) begin
+            for(i = 0; i < FIFO_DEPTH; i = i + 1) begin
                 LoadQueue[i].age    <= 0;
                 LoadQueue[i].addr   <= 0;
                 LoadQueue[i].data   <= 0;
+                LoadQueue[i].funct3 <= 0;
                 LoadQueue[i].rob_id <= 0;
                 LoadQueue[i].rd_phy <= 0;
                 LoadQueue[i].valid  <= 1'b0;
@@ -175,6 +177,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, QUEUE = 16)(
                 LoadQueue[tail_load].age    <= current_age;
                 LoadQueue[tail_load].addr   <= load_raddr;
                 LoadQueue[tail_load].data   <= 0; // data to be filled on memory response
+                LoadQueue[tail_load].funct3 <= load_funct3;
                 LoadQueue[tail_load].rob_id <= load_rob_id;
                 LoadQueue[tail_load].rd_phy <= load_rd_phy;
                 LoadQueue[tail_load].valid  <= 1'b0;

@@ -3,15 +3,15 @@
 import parameter_pkg::*;
 import typedef_pkg::*;
 
-module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 32, PHY_WIDTH = 6)(
+module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 32)(
     input  logic clk,
     input  logic rst,
     input  logic flush,
     input  logic done,
     // ========= rename interface ====================
     input  logic [1:0]busy_valid,
-    input  logic [REG_WIDTH-1:0]rd_phy_busy_0,   // mark rd_phy busy
-    input  logic [REG_WIDTH-1:0]rd_phy_busy_1,   // mark rs1_phy busy
+    input  logic [PHY_WIDTH-1:0]rd_phy_busy_0,   // mark rd_phy busy
+    input  logic [PHY_WIDTH-1:0]rd_phy_busy_1,   // mark rs1_phy busy
     output logic [PHY_REGS-1:0]PRF_busy,         // if busy = 1 => this register is not ready
     // ========= read execution interface ===============
     output logic [PHY_REGS-1:0]PRF_valid,
@@ -37,16 +37,16 @@ module PhysicalRegister #(parameter REG_WIDTH = 32, PHY_REGS = 64, DATA_WIDTH = 
     // alu commit interface
     input  logic commit_alu_valid,                     // commit enable signal
     input  logic [PHY_WIDTH-1:0]commit_rd_alu,                 // physical register address to commit
-    input  logic [REG_WIDTH-1:0]commit_alu_result,     // data to writ
+    input  logic [DATA_WIDTH-1:0]commit_alu_result,     // data to write
     // load/store commit interface
     input  logic commit_load_valid,                       // commit enable signal
     input  logic [PHY_WIDTH-1:0]commit_rd_load,                  // physical register address to commit
-    input  logic [REG_WIDTH-1:0]commit_load_rdata, // data to write
+    input  logic [DATA_WIDTH-1:0]commit_load_rdata, // data to write
     // branch commit interface
     input  logic commit_jump_valid,                   // commit enable 
     input  logic commit_branch_valid,
     input  logic [PHY_WIDTH-1:0]commit_rd_branch,              // physical register address to commit
-    input  logic [REG_WIDTH-1:0]commit_nextPC, // data to write
+    input  logic [DATA_WIDTH-1:0]commit_nextPC, // data to write
     // ============= commit /retire interface ====================
     input logic [PHY_WIDTH-1:0]rd_phy_old_commit,
     input logic [PHY_WIDTH-1:0]rd_phy_new_commit,

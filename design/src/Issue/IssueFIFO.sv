@@ -1,5 +1,4 @@
 `timescale 1ns / 1ps
-import parameter_pkg::*;
 
 module IssueFIFO #(parameter FIFO_DEPTH = 16) (
     input logic clk,

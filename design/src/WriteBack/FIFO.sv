@@ -1,7 +1,6 @@
 `timescale 1ns / 1ps
-import parameter_pkg::*;
 
-module FIFO #(parameter DATA_WIDTH = 32,parameter FIFO_DEPTH = 16) (
+module FIFO #(parameter DATA_WIDTH = 32, FIFO_DEPTH = 16) (
     input logic clk,
     input logic rst,
     input logic flush,
