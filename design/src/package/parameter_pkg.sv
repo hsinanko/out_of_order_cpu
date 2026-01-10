@@ -19,8 +19,8 @@ package parameter_pkg;
 
     parameter INSTR_ADDRESS = 32'h0000_0000;
     parameter DATA_ADDRESS  = 32'h0000_1000;
-    parameter INSTR_MEM_SIZE = (DATA_ADDRESS - INSTR_ADDRESS) << 2; // in bytes
-    parameter DATA_MEM_SIZE = (1024) << 2; // in bytes
+    parameter INSTR_MEM_SIZE = (DATA_ADDRESS - INSTR_ADDRESS); // in bytes
+    parameter DATA_MEM_SIZE = (32'h0000_2000); // in bytes
     parameter BOOT_PC       = INSTR_ADDRESS;
 
 endpackage

@@ -24,6 +24,8 @@ package typedef_pkg;
         logic actual_taken;
         logic [ADDR_WIDTH-1:0] update_pc;
         logic mispredict;
+        // debugging info
+        logic [ADDR_WIDTH-1:0] addr;
     } ROB_ENTRY_t;
 
     typedef struct{

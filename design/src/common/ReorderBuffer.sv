@@ -42,9 +42,11 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     output logic                 retire_store_valid, // retire store valid
     output logic                 retire_branch_valid,
     output logic                 retire_done_valid,
-    output logic [ROB_WIDTH-1:0] rob_debug,
     output logic                 rob_full,
-    output logic                 rob_empty
+    output logic                 rob_empty,
+    // debugging interface
+    output logic [ROB_WIDTH-1:0] rob_debug,
+    output logic [ADDR_WIDTH-1:0] retire_addr,
 );
 
     ROB_ENTRY_t ROB [NUM_ROB_ENTRY-1:0]; // FIFO
@@ -71,6 +73,8 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
                 ROB[i].actual_taken   = 1'b0;
                 ROB[i].update_pc      = 'h0;
                 ROB[i].mispredict     = 1'b0;
+                // debugging info
+                ROB[i].addr           = 'h0;
             end
             count <= 0;
             tail  <= 0;
@@ -177,6 +181,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
         end
     end
 
+
     always_comb begin
         if(flush)begin
             rd_arch_commit      = 'h0;
@@ -191,7 +196,8 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
             retire_done_valid   = 1'b0;
         end
         else if(ROB_FINISH[head]) begin
-            rob_debug = head;
+            rob_debug   = head;
+            retire_addr = ROB[head].addr;
             if(isALU) begin
                 rd_arch_commit      = ROB[head].rd_arch;
                 rd_phy_old_commit   = ROB[head].rd_phy_old;

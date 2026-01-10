@@ -1,4 +1,4 @@
-'h00000000  li a0, 1
+'h00000000  li a0, 4
 'h00000004  addi sp, sp, -4
 'h00000008  sw a0, 0(sp)
 'h0000000c  jal fibonacci

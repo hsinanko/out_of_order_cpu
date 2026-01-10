@@ -34,7 +34,7 @@ module Memory #(parameter INSTR_ADDRESS = 32'h0000_0000, DATA_ADDRESS = 32'h0000
         end
     end
 
-    InstructionROM #(ADDR_WIDTH, DATA_WIDTH) instr_rom (
+    InstructionROM #(ADDR_WIDTH, DATA_WIDTH, INSTR_MEM_SIZE) instr_rom (
         .instr_data(instr_data),
         .addr(pc),
         .predict_taken_0(predict_taken_0),

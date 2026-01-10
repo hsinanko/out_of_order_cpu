@@ -10,7 +10,7 @@ module DataMemory #(
 ) (
     input  logic clk,
     input  logic rst,
-    input  logic [(DATA_MEM_SIZE*4*8)-1:0] init_data,
+    input  logic [(DATA_MEM_SIZE*8)-1:0] init_data,
     input  logic mem_write_en,
     input  logic [ADDR_WIDTH-1:0] waddr,
     input  logic [DATA_WIDTH-1:0] wdata,
@@ -65,17 +65,17 @@ module DataMemory #(
         end
     end
 
-    // For debugging: dump memory contents at each clock cycle
-    integer           mcd;
+    // // For debugging: dump memory contents at each clock cycle
+    // integer           mcd;
 
-    always_ff @(negedge clk) begin
-        mcd = $fopen("../test/build/DataMemory.txt","w");
+    // always_ff @(negedge clk) begin
+    //     mcd = $fopen("../test/build/DataMemory.txt","w");
 
-        for (i=0; i< DATA_MEM_SIZE; i=i+4) begin
-            $fdisplay(mcd,"%4h %2h%2h%2h%2h", i, DataMem[i+3], DataMem[i+2], DataMem[i+1], DataMem[i]);
-        end
-        $fclose(mcd);
-        //$display("Memory contents dumpe to Memory file at time %0t", $time);
-    end
+    //     for (i=0; i< DATA_MEM_SIZE; i=i+4) begin
+    //         $fdisplay(mcd,"0x%08h %2h%2h%2h%2h", i, DataMem[i+3], DataMem[i+2], DataMem[i+1], DataMem[i]);
+    //     end
+    //     $fclose(mcd);
+    //     //$display("Memory contents dumpe to Memory file at time %0t", $time);
+    // end
 
 endmodule

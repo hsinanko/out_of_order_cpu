@@ -14,9 +14,17 @@ module IssueExecution_tb();
 
     logic done;
     logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out;
+    logic [ADDR_WIDTH-1:0]retire_addr_reg;
+    logic retire_valid_reg;
     logic [PHY_REGS-1:0]PRF_busy_out;
     logic [PHY_REGS-1:0]PRF_valid_out;
     logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out;
+    logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat_out; 
+
+    logic [PHY_WIDTH-1:0]front_rat[0:ARCH_REGS-1];
+    logic [PHY_WIDTH-1:0]back_rat[0:ARCH_REGS-1];
+    logic [DATA_WIDTH-1:0]prf [0:PHY_REGS-1];
+
     always #5 clk = ~clk; // Clock generation
 
     O3O_CPU #(ADDR_WIDTH, DATA_WIDTH, REG_WIDTH, PHY_REGS, PHY_WIDTH, ROB_WIDTH, NUM_RS_ENTRIES) dut_cpu (
@@ -24,11 +32,16 @@ module IssueExecution_tb();
         .rst(rst),
         .boot_pc(boot_pc),
         .done(done),
+        .retire_addr_reg(retire_addr_reg),
+        .retire_valid_reg(retire_valid_reg),
         .PRF_data_out(PRF_data_out),
         .PRF_busy_out(PRF_busy_out),
         .PRF_valid_out(PRF_valid_out),
-        .front_rat_out(front_rat_out)
+        .front_rat_out(front_rat_out),
+        .back_rat_out(back_rat_out)
     );
+
+
 
     initial begin
         $dumpfile("IssueExecution_tb.vcd");
@@ -46,72 +59,81 @@ module IssueExecution_tb();
     end
 
 
+    integer i, j;
+    always_comb begin
+        for(int i = 0; i < ARCH_REGS; i = i + 1) begin
+            front_rat[i] = front_rat_out[i*PHY_WIDTH +: PHY_WIDTH];
+            back_rat[i]  = back_rat_out[i*PHY_WIDTH +: PHY_WIDTH];
+        end
 
+        for(int j = 0; j < PHY_REGS; j = j + 1) begin
+            prf[j] = PRF_data_out[j*DATA_WIDTH +: DATA_WIDTH];
+        end
+
+    end
 
     logic [31:0]n_cycles;
     logic finished;
-    always@(posedge clk)begin
-        if(rst) begin
-            finished <= 0;
-        end
-        else if(done)begin
-            finished <= 1;
-        end
-        else begin
-            finished <= 0;
-        end
-    end
 
-    always @(posedge clk or posedge rst)begin
+    // ========== Cycle Counter and Logging ==========
+    always_ff @(posedge clk or posedge rst)begin
         if(rst) 
             n_cycles <= 0;
         else begin
             n_cycles <= n_cycles + 1;
-            $display("Cycle: %0d", n_cycles);
         end
     end
 
-    always_comb begin
-        if(n_cycles >= 300) begin
-            $display("\n\t=========== Max cycle reached, ending simulation ===========\n");
-            $finish;
+    always_ff @(posedge clk)begin
+        if(!rst)begin
+            if(retire_valid_reg)
+                $display("Cycle: %5d Retired Address: 0x%08h", n_cycles, retire_addr_reg);
+            else
+                $display("Cycle: %5d", n_cycles);
         end
+    end
+
+    // ========== Finish simulation after done signal ==========
+    always_ff @(posedge clk)begin
+        if(rst) 
+            finished <= 0;
+        else if(done) 
+            finished <= 1;
+        else 
+            finished <= 0;
     end
 
     always_comb begin
         if(finished) begin
-            $display("\n=========== Simulation ended ===========\n");
-            print_CPU_State(PRF_data_out, PRF_busy_out, PRF_valid_out, front_rat_out);
+            $display("\n\t=========== Simulation ended ===========\n");
+            print_CPU_State(1);
+            $finish;
+        end
+        else if(n_cycles >= 30000) begin
+            $display("\n\t=========== Max cycle reached, ending simulation ===========\n");
+            print_CPU_State(0);
             $finish;
         end
     end
 
-    task automatic print_CPU_State(logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out,
-                                   logic [PHY_REGS-1:0]PRF_busy_out,
-                                   logic [PHY_REGS-1:0]PRF_valid_out,
-                                   logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out);
+    task automatic print_CPU_State(logic finished);
 
-        logic [PHY_WIDTH-1:0]front_rat[0:ARCH_REGS-1];
-        logic [DATA_WIDTH-1:0]prf [0:PHY_REGS-1];
         integer i;
         $display("\n================ Architecture Register DATA ================"); 
         
-        for(i = 0; i < PHY_REGS; i = i + 1) begin
-            prf[i] = PRF_data_out[(i+1)*DATA_WIDTH-1 -: DATA_WIDTH];
-        end
-        for(i = 0; i < ARCH_REGS; i = i + 1) begin
-            front_rat[i] = front_rat_out[i*PHY_WIDTH +: PHY_WIDTH];
-            
-        end
-
+        if(finished) begin
         for(i = 0; i < ARCH_REGS; i = i + 8)
         $display("x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h", 
                  i, prf[front_rat[i]],   i+1, prf[front_rat[i+1]], i+2, prf[front_rat[i+2]], i+3, prf[front_rat[i+3]],
                  i+4, prf[front_rat[i+4]], i+5, prf[front_rat[i+5]], i+6, prf[front_rat[i+6]], i+7, prf[front_rat[i+7]]);
-
-
-        $display("==========================================\n");
-
+        end
+        else begin
+            for(i = 0; i < ARCH_REGS; i = i + 8)
+                $display("x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h, x%02d = 0x%8h", 
+                 i, prf[back_rat[i]],   i+1, prf[back_rat[i+1]], i+2, prf[back_rat[i+2]], i+3, prf[back_rat[i+3]],
+                 i+4, prf[back_rat[i+4]], i+5, prf[back_rat[i+5]], i+6, prf[back_rat[i+6]], i+7, prf[back_rat[i+7]]);
+        end
+        $display("============================================================\n");
     endtask
 endmodule
 

@@ -11,12 +11,24 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
     input logic [ADDR_WIDTH-1:0] boot_pc,
     output logic done,
     // === Debugging Interface ==================
+    output logic [ADDR_WIDTH-1:0] retire_addr_reg,
+    output logic retire_valid_reg,
     output logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out,
     output logic [PHY_REGS-1:0]PRF_busy_out,
     output logic [PHY_REGS-1:0]PRF_valid_out,
-    output logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out
+    output logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out,
+    output logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat_out
 );
-
+    // ============= Debugging ==================
+    assign back_rat_out = back_rat;
+    logic [ADDR_WIDTH-1:0]retire_addr;
+    always_ff @(posedge clk or posedge rst) begin
+        if (rst)
+            retire_addr_reg <= 'h0;
+        else
+            retire_addr_reg <= retire_addr;
+    end
+    assign retire_valid_reg = (flush) ? 1'b0 : (retire_pr_valid_reg || retire_store_valid_reg || retire_branch_valid_reg);
     // ============= Flush Logic ===================
     logic flush;
     logic isFlush;
@@ -782,9 +794,10 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, REG_WIDTH = 32, PHY
         .retire_store_valid(retire_store_valid),
         .retire_branch_valid(retire_branch_valid),
         .retire_done_valid(retire_done_valid),
-        .rob_debug(rob_debug),
         .rob_full(rob_full),
-        .rob_empty(rob_empty)
+        .rob_empty(rob_empty),
+        .rob_debug(rob_debug),
+        .retire_addr(retire_addr)
     );
 
     

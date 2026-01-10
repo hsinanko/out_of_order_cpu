@@ -1,8 +1,8 @@
 `timescale 1ns / 1ps
 import parameter_pkg::*;
 
-module InstructionROM #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
-    input  logic [4096*8-1:0]      instr_data,
+module InstructionROM #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, INSTR_MEM_SIZE = 4096)(
+    input  logic [INSTR_MEM_SIZE*8-1:0]      instr_data,
     input  logic [ADDR_WIDTH-1:0]  addr,           // Address input
     input  logic                   predict_taken_0, // Branch prediction signal
     input  logic [ADDR_WIDTH-1:0]  predict_target_0,
@@ -15,13 +15,13 @@ module InstructionROM #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
 
 
     // Simple instruction memory (for simulation purposes) - store 32-bit words
-    logic [7:0] instruction_memory [0:4095];
+    logic [7:0] instruction_memory [0:INSTR_MEM_SIZE-1];
 
     logic [9:0] count;
     // Try to load a word-per-line hex memory file from common locations. If not
     // found, initialize memory to zeros and warn.
     initial begin
-        for (int i = 0; i < 4096; i = i + 1) begin
+        for (int i = 0; i < INSTR_MEM_SIZE; i = i + 1) begin
             instruction_memory[i] = instr_data[i*8 +: 8];
         end
     end
@@ -34,8 +34,8 @@ module InstructionROM #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
                          instruction_memory[predict_target_0 + 1], instruction_memory[predict_target_0]};
           
         // valid signals
-        instruction_valid[0] = (addr + 4 <= 4096) ? 1 : 0;
-        instruction_valid[1] = (predict_target_0 + 4 <= 4096) ? 1 : 0;
+        instruction_valid[0] = (addr + 4 <= INSTR_MEM_SIZE) ? 1 : 0;
+        instruction_valid[1] = (predict_target_0 + 4 <= INSTR_MEM_SIZE) ? 1 : 0;
 
     end
 

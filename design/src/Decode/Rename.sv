@@ -166,6 +166,8 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
     assign dispatch_rob_0.actual_taken = 1'b0;
     assign dispatch_rob_0.update_pc    = 'h0;
     assign dispatch_rob_0.mispredict = 1'b0;
+    // debugging info
+    assign dispatch_rob_0.addr = instruction_addr_0;
     //========== Second instruction =================
     assign dispatch_rob_1.rd_arch    = rd_arch_1;
     assign dispatch_rob_1.rd_phy_old = rd_phy_1;
@@ -175,8 +177,8 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, REG_WIDTH = 32, ARC
     assign dispatch_rob_1.actual_taken = 1'b0;
     assign dispatch_rob_1.update_pc    = 'h0;
     assign dispatch_rob_1.mispredict = 1'b0;
-
-
+    // debugging info
+    assign dispatch_rob_1.addr = instruction_addr_1;
     // ============= Decode / Dispatch Stage ==============
     logic [1:0]rename_valid;
     instruction_t rename_instruction_0;
