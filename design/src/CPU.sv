@@ -254,6 +254,9 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
     logic [DATA_WIDTH-1:0] mem_wdata;
     // ============ Reorder Buffer ==================
     logic rob_full, rob_empty;
+    logic [NUM_ROB_ENTRY-1:0]       ROB_FINISH;
+    ROB_ENTRY_t ROB[NUM_ROB_ENTRY-1:0];
+    logic [ROB_WIDTH-1:0] rob_head;
     // ============= Retire Stage ==================
 
     logic [4:0] rd_arch_commit;
@@ -771,7 +774,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
 
     logic [ROB_WIDTH-1:0] rob_debug;
     logic [ROB_WIDTH-1:0] rob_debug_reg;
-    ReorderBuffer #(NUM_ROB_ENTRY, ROB_WIDTH, PHY_WIDTH) ROB(
+    ReorderBuffer #(NUM_ROB_ENTRY, ROB_WIDTH, PHY_WIDTH) ROB_Unit(
         .clk(clk),
         .rst(rst),
         .flush(flush),
@@ -793,6 +796,21 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .commit_actual_taken(commit_actual_taken_reg),
         .commit_update_pc(commit_update_pc_reg),
         // outputs to backend/architectural state
+        // rob_status outputs (used in retire stage)
+        .rob_finish(ROB_FINISH),
+        .rob(ROB),
+        .rob_head(rob_head),
+        .rob_full(rob_full),
+        .rob_empty(rob_empty)
+    );
+
+    Retire #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY) Retire_Unit(
+        .clk(clk),
+        .rst(rst),
+        .flush(flush),
+        .ROB_FINISH(ROB_FINISH),
+        .ROB(ROB),
+        .rob_head(rob_head),
         .isFlush(isFlush),
         .targetPC(targetPC),
         .rd_arch_commit(rd_arch_commit),
@@ -805,8 +823,6 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .retire_store_valid(retire_store_valid),
         .retire_branch_valid(retire_branch_valid),
         .retire_done_valid(retire_done_valid),
-        .rob_full(rob_full),
-        .rob_empty(rob_empty),
         .rob_debug(rob_debug),
         .retire_addr(retire_addr)
     );

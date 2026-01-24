@@ -44,6 +44,9 @@ WB = \
 		../src/WriteBack/LoadStoreQueue.sv \
 		../src/WriteBack/WriteBack.sv
 
+RE = \
+		../src/Retire/Retire.sv
+
 TB ?= IssueExecution_tb
 VFLAGS = --binary -sv --trace -Wall -Wno-fatal \
 						-o  $(TB) \
@@ -52,7 +55,8 @@ VFLAGS = --binary -sv --trace -Wall -Wno-fatal \
 							$(IF) \
 							$(ID) \
 							$(EXE) \
-							$(WB)
+							$(WB) \
+							$(RE)
 
 
 TEST ?= fibonacci
