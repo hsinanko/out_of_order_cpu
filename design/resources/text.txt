@@ -13,37 +13,28 @@ fibonacci:
 'h00000028  sw a0, 4(sp)
 'h0000002c  sw x0, 8(sp)
 
-'h00000030  li t0, 0
-'h00000034  beq a0, t0, ret_zero
-'h00000038  li t0, 1
-'h0000003c  beq a0, t0, ret_one
+'h00000030  li t0, 1
+'h00000034  bge t0, a0, ret_n
 
-'h00000040  lw t1, 4(sp)
-'h00000044  addi a0, t1, -1
-'h00000048  jal fibonacci
-'h0000004c  sw a0, 8(sp)
+'h00000038  lw t1, 4(sp)
+'h0000003C  addi a0, t1, -1
+'h00000040  jal fibonacci
+'h00000044  sw a0, 8(sp)
 
-'h00000050  lw t1, 4(sp)
-'h00000054  addi a0, t1, -2
-'h00000058  jal fibonacci
-'h0000005c  lw a1, 8(sp)
-'h00000060  add a0, a0, a1
+'h00000048  lw t1, 4(sp)
+'h0000004c  addi a0, t1, -2
+'h00000050  jal fibonacci
+'h00000054  lw a1, 8(sp)
+'h00000058  add a0, a0, a1
+'h0000005C  lw ra, 0(sp)
+'h00000060  addi sp, sp, 12
+'h00000064  jr ra
 
-'h00000064  lw ra, 0(sp)
-'h00000068  addi sp, sp, 12
-'h0000006c  jr ra
-
-ret_zero:
-'h00000070  mv a0, x0
-'h00000074  lw ra, 0(sp)
-'h00000078  addi sp, sp, 12
-'h0000007c  jr ra
-
-ret_one:
-'h00000080  li a0, 1
-'h00000084  lw ra, 0(sp)
-'h00000088  addi sp, sp, 12
-'h0000008c  jr ra
+ret_n:
+'h00000068  addi a0, a0, x0
+'h0000006C  lw ra, 0(sp)
+'h00000070  addi sp, sp, 12
+'h00000074  jr ra
 
 exit:
-'h00000090  ecall
+'h00000078  ecall

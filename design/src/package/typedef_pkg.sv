@@ -24,6 +24,7 @@ package typedef_pkg;
         logic actual_taken;
         logic [ADDR_WIDTH-1:0] update_pc;
         logic mispredict;
+        logic [$clog2(FIFO_DEPTH)-1:0] store_id;
         // debugging info
         logic [ADDR_WIDTH-1:0] addr;
     } ROB_ENTRY_t;

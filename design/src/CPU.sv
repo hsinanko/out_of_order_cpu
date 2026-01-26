@@ -187,6 +187,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
     // store
     logic                  commit_store_valid;
     logic [ROB_WIDTH-1:0]  commit_store_rob_id;
+    logic [$clog2(FIFO_DEPTH)-1:0] commit_store_id;
     // branch
     logic                  commit_branch_valid;
     logic                  commit_jump_valid;
@@ -208,6 +209,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
     logic [DATA_WIDTH-1:0] commit_load_rdata_reg;
     logic                  commit_store_valid_reg;
     logic [ROB_WIDTH-1:0]  commit_store_rob_id_reg;
+    logic [$clog2(FIFO_DEPTH)-1:0] commit_store_id_reg;
     logic                  commit_branch_valid_reg;
     logic                  commit_jump_valid_reg;
     logic [ROB_WIDTH-1:0]  commit_branch_rob_id_reg;
@@ -267,6 +269,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
     logic [ADDR_WIDTH-1:0] update_btb_target;
     logic retire_pr_valid;
     logic retire_store_valid;
+    logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id;
     logic retire_branch_valid;
     logic retire_done_valid;
     // Retire logic
@@ -278,6 +281,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
     logic [ADDR_WIDTH-1:0] update_btb_target_reg;
     logic retire_pr_valid_reg;
     logic retire_store_valid_reg;
+    logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id_reg;
     logic retire_branch_valid_reg;
     logic retire_done_valid_reg;
 
@@ -307,7 +311,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .rdata_valid(mem_rdata_valid)
     );
 
-
+    assign update_valid = retire_branch_valid;
     BTB #(ADDR_WIDTH, BTB_ENTRIES, BTB_WIDTH) BTB_unit(
         .clk(clk),
         .rst(rst),
@@ -658,6 +662,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         // store
         .commit_store_valid(commit_store_valid),
         .commit_store_rob_id(commit_store_rob_id),
+        .commit_store_id(commit_store_id),
         // branch
         .commit_branch_valid(commit_branch_valid),
         .commit_jump_valid(commit_jump_valid),
@@ -676,6 +681,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .mem_rdata_valid(mem_rdata_valid),
         // Retire Interface
         .retire_store_valid(retire_store_valid_reg),
+        .retire_store_id(retire_store_id_reg),
         .mem_write_en(mem_write_en),
         .mem_waddr(mem_waddr),
         .mem_wdata(mem_wdata)
@@ -694,6 +700,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
             commit_load_rdata_reg    <= 'b0;
             commit_store_valid_reg   <= 1'b0;
             commit_store_rob_id_reg  <= 1'b0;
+            commit_store_id_reg      <= 'b0;
             commit_branch_valid_reg  <= 1'b0;
             commit_jump_valid_reg    <= 1'b0;
             commit_branch_rob_id_reg <= 1'b0;
@@ -715,6 +722,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
             commit_load_rdata_reg    <= commit_load_rdata;
             commit_store_valid_reg   <= commit_store_valid;
             commit_store_rob_id_reg  <= commit_store_rob_id;
+            commit_store_id_reg      <= commit_store_id;
             commit_branch_valid_reg  <= commit_branch_valid;
             commit_jump_valid_reg    <= commit_jump_valid;
             commit_branch_rob_id_reg <= commit_branch_rob_id;
@@ -774,7 +782,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
 
     logic [ROB_WIDTH-1:0] rob_debug;
     logic [ROB_WIDTH-1:0] rob_debug_reg;
-    ReorderBuffer #(NUM_ROB_ENTRY, ROB_WIDTH, PHY_WIDTH) ROB_Unit(
+    ReorderBuffer #(NUM_ROB_ENTRY, ROB_WIDTH, PHY_WIDTH, FIFO_DEPTH) ROB_Unit(
         .clk(clk),
         .rst(rst),
         .flush(flush),
@@ -789,6 +797,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .commit_load_rob_id(commit_load_rob_id_reg),
         .commit_store_valid(commit_store_valid_reg),
         .commit_store_rob_id(commit_store_rob_id_reg),
+        .commit_store_id(commit_store_id_reg),
         .commit_branch_valid(commit_branch_valid_reg),
         .commit_branch_rob_id(commit_branch_rob_id_reg),
         .commit_mispredict(commit_mispredict_reg),
@@ -804,7 +813,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .rob_empty(rob_empty)
     );
 
-    Retire #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY) Retire_Unit(
+    Retire #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH) Retire_Unit(
         .clk(clk),
         .rst(rst),
         .flush(flush),
@@ -821,6 +830,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .update_btb_target(update_btb_target),
         .retire_pr_valid(retire_pr_valid),
         .retire_store_valid(retire_store_valid),
+        .retire_store_id(retire_store_id),
         .retire_branch_valid(retire_branch_valid),
         .retire_done_valid(retire_done_valid),
         .rob_debug(rob_debug),
@@ -839,6 +849,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
             update_btb_target_reg   <= 'h0;
             retire_pr_valid_reg     <= 1'b0;
             retire_store_valid_reg  <= 1'b0;
+            retire_store_id_reg     <= 'h0;
             retire_branch_valid_reg <= 1'b0;
             retire_done_valid_reg   <= 1'b0;
             rob_debug_reg           <= 'h0;
@@ -852,6 +863,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
             update_btb_target_reg   <= update_btb_target;
             retire_pr_valid_reg     <= retire_pr_valid;
             retire_store_valid_reg  <= retire_store_valid;
+            retire_store_id_reg     <= retire_store_id;
             retire_branch_valid_reg <= retire_branch_valid;
             retire_done_valid_reg   <= retire_done_valid;
             rob_debug_reg           <= rob_debug;

@@ -163,11 +163,9 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_RE
         for (i = 0; i < NUM_RS_ENTRIES; i = i + 1) begin
             if(RS[i].valid)begin
                 case(RS[i].opcode)
-                    LOAD, STORE: begin
-                        if (PRF_valid[RS[i].rs1_phy]) begin
-                            if ((best == invalid_index) || RS[i].age < RS[best].age)
-                                best = i;
-                        end
+                    LOAD, STORE:begin
+                        if ((best == invalid_index) || RS[i].age < RS[best].age)
+                            best = i;
                     end
                     BRANCH: begin
                         if (PRF_valid[RS[i].rs1_phy] && PRF_valid[RS[i].rs2_phy]) begin
@@ -202,6 +200,18 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_RE
                 endcase
             end
         end
+
+        if(RS[best].opcode == LOAD) begin
+            if (!PRF_valid[RS[best].rs1_phy]) begin
+                best = invalid_index;
+            end
+        end
+        else if(RS[best].opcode == STORE) begin
+            if (!(PRF_valid[RS[best].rs1_phy] && PRF_valid[RS[best].rs2_phy])) begin
+                best = invalid_index;
+            end
+        end
+
         return best;
     end
     endfunction

@@ -46,6 +46,7 @@ module WriteBack #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, RO
     //store
     output  logic                  commit_store_valid,
     output  logic [ROB_WIDTH-1:0]  commit_store_rob_id,
+    output  logic [$clog2(FIFO_DEPTH)-1:0] commit_store_id,
     // branch
     output  logic                  commit_branch_valid,
     output  logic                  commit_jump_valid,
@@ -64,11 +65,13 @@ module WriteBack #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, RO
     input  logic                  mem_rdata_valid,
     // ========== retire interface ==============
     input   logic                 retire_store_valid,
+    input  logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id,
     output logic                  mem_write_en,
     output logic [ADDR_WIDTH-1:0] mem_waddr,
     output logic [DATA_WIDTH-1:0] mem_wdata 
 );
 
+    logic [$clog2(FIFO_DEPTH)-1:0] store_id;
     LoadStoreQueue #(.ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH), .FIFO_DEPTH(FIFO_DEPTH)) LSQ (
         .clk(clk),
         .rst(rst),
@@ -78,6 +81,7 @@ module WriteBack #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, RO
         .store_wdata(store_wdata),
         .store_rob_id(store_rob_id),
         .store_valid(store_valid),
+        .store_id(store_id),
         // Load inputs
         .load_funct3(load_funct3),
         .load_raddr(load_raddr),
@@ -97,6 +101,7 @@ module WriteBack #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, RO
         .mem_rdata_valid(mem_rdata_valid),
         // ========= retire interface ==============
         .retire_store_valid(retire_store_valid),
+        .retire_store_id(retire_store_id),
         .mem_write_en(mem_write_en),
         .mem_waddr(mem_waddr),
         .mem_wdata(mem_wdata)
@@ -111,6 +116,7 @@ module WriteBack #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, RO
         // store
         commit_store_valid    = (flush) ? 1'b0 : (store_valid);
         commit_store_rob_id   = store_rob_id;
+        commit_store_id       = store_id;
         // branch
         commit_branch_valid   = (flush) ? 1'b0 : branch_valid;
         commit_jump_valid     = (flush) ? 1'b0 : isJump;

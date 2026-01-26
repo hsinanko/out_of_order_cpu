@@ -120,7 +120,7 @@ module IssueExecution_tb();
             print_CPU_State(1);
             $finish;
         end
-        else if(n_cycles >= 100000) begin
+        else if(n_cycles >= 20000) begin
             $display("\n\t=========== Max cycle reached, ending simulation ===========\n");
             print_CPU_State(0);
             $finish;

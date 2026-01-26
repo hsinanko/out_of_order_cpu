@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 import typedef_pkg::*;
-module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 16)(
+module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 32, FIFO_DEPTH = 16)(
     input  logic                  clk,
     input  logic                  rst,
     input  logic                 flush,
@@ -17,6 +17,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 16)(
     output logic                  update_btb_taken,
     output logic                  retire_pr_valid,
     output logic                  retire_store_valid, // retire store valid
+    output logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id,
     output logic                  retire_branch_valid,
     output logic                  retire_done_valid,
     output logic [ROB_WIDTH-1:0] rob_debug,
@@ -63,6 +64,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 16)(
             update_btb_target   = 'h0;
             retire_pr_valid     = 1'b0;
             retire_store_valid  = 1'b0;
+            retire_store_id     = '0;
             retire_branch_valid = 1'b0;
             retire_done_valid   = 1'b0;
         end
@@ -78,6 +80,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 16)(
                 update_btb_target   = '0;
                 retire_pr_valid     = 1'b1;
                 retire_store_valid  = 1'b0;
+                retire_store_id     = '0;
                 retire_branch_valid = 1'b0;
                 retire_done_valid   = 1'b0;
             end
@@ -90,6 +93,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 16)(
                 update_btb_target   = '0;
                 retire_pr_valid     = 1'b1;
                 retire_store_valid  = 1'b0;
+                retire_store_id     = '0;
                 retire_branch_valid = 1'b0;
                 retire_done_valid   = 1'b0;
             end
@@ -102,6 +106,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 16)(
                 update_btb_target   = '0;
                 retire_pr_valid     = 1'b0;
                 retire_store_valid  = 1'b1;
+                retire_store_id     = ROB[rob_head].store_id;
                 retire_branch_valid = 1'b0;
                 retire_done_valid   = 1'b0;
             end
@@ -114,6 +119,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 16)(
                 update_btb_target   = ROB[rob_head].actual_target;
                 retire_pr_valid     = 1'b0;
                 retire_store_valid  = 1'b0;
+                retire_store_id     = '0;
                 retire_branch_valid = 1'b1;
                 retire_done_valid   = 1'b0;
             end
@@ -126,6 +132,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 16)(
                 update_btb_target   = ROB[rob_head].actual_target;
                 retire_pr_valid     = (rd_arch_commit != 'h0) ? 1'b1 : 1'b0;
                 retire_store_valid  = 1'b0;
+                retire_store_id     = '0;
                 retire_branch_valid = 1'b1;
                 retire_done_valid   = 1'b0;
             end
@@ -138,6 +145,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 16)(
                 update_btb_target   = 'h0;
                 retire_pr_valid     = 1'b0;
                 retire_store_valid  = 1'b0;
+                retire_store_id     = '0;
                 retire_branch_valid = 1'b0;
                 retire_done_valid   = 1'b1;
             end
@@ -150,6 +158,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 16)(
                 update_btb_target   = 'h0;
                 retire_pr_valid     = 1'b0;
                 retire_store_valid  = 1'b0;
+                retire_store_id     = '0;
                 retire_branch_valid = 1'b0;
                 retire_done_valid   = 1'b0;
             end
@@ -163,6 +172,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 16)(
             update_btb_target   = 'h0;
             retire_pr_valid     = 1'b0;
             retire_store_valid  = 1'b0;
+            retire_store_id     = '0;
             retire_branch_valid = 1'b0;
             retire_done_valid   = 1'b0;
         end

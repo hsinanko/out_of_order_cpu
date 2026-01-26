@@ -3,7 +3,7 @@
 import instruction_pkg::*;
 import typedef_pkg::*;
 
-module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 6)(
+module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 6, FIFO_DEPTH = 16)(
     input  logic                  clk,
     input  logic                  rst,
     input  logic                  flush,
@@ -22,6 +22,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     input  logic [ROB_WIDTH-1:0]  commit_load_rob_id,
     input  logic                  commit_store_valid,
     input  logic [ROB_WIDTH-1:0]  commit_store_rob_id,
+    input  logic [$clog2(FIFO_DEPTH)-1:0] commit_store_id,
     input  logic                  commit_branch_valid,
     input  logic [ROB_WIDTH-1:0]  commit_branch_rob_id,
     input  logic                  commit_mispredict,
@@ -64,6 +65,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
                 ROB[i].actual_taken   = 1'b0;
                 ROB[i].update_pc      = 'h0;
                 ROB[i].mispredict     = 1'b0;
+                ROB[i].store_id       = 'h0;
                 // debugging info
                 ROB[i].addr           = 'h0;
             end
@@ -133,6 +135,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
             end
             if(commit_store_valid) begin
                 ROB_FINISH[commit_store_rob_id] <= 1'b1;
+                ROB[commit_store_rob_id].store_id <= commit_store_id;
             end
             if(commit_branch_valid) begin
                 ROB_FINISH[commit_branch_rob_id]        <= 1'b1;

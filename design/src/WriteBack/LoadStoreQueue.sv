@@ -11,6 +11,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     input logic [DATA_WIDTH-1:0] store_wdata,
     input logic [ROB_WIDTH-1:0]  store_rob_id,
     input logic                  store_valid,
+    output logic [$clog2(FIFO_DEPTH)-1:0] store_id,
     // Load inputs
     input logic [2:0]            load_funct3,
     input logic [ADDR_WIDTH-1:0] load_raddr,
@@ -29,6 +30,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     input  logic                  mem_rdata_valid,
     // ========= retire interface ==============
     input logic                   retire_store_valid,
+    input logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id,
     output logic                  mem_write_en,
     output logic [ADDR_WIDTH-1:0] mem_waddr,
     output logic [DATA_WIDTH-1:0] mem_wdata
@@ -73,45 +75,52 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
 
     // ========== Store Queue Management ==========
     integer i;
+    logic [$clog2(FIFO_DEPTH)-1:0] free_store_id;
+    FreeEntry #(FIFO_DEPTH) store_free_entry (
+        .clk(clk),
+        .rst(rst),
+        .flush(flush),
+        .valid(isStore),
+        .is_empty(store_empty),
+        .is_full(store_full),
+        .free_entry(free_store_id),
+        .retire_store_valid(retire_store_valid),
+        .retire_entry(retire_store_id) 
+    );
+
+    assign store_id = (isStore) ? free_store_id : 'hx;
     always_ff @(posedge clk or posedge rst) begin
         if(rst) begin
-            head_store  <= 0;
-            tail_store  <= 0;
-            store_count <= 0;
             for(i = 0; i < FIFO_DEPTH; i = i + 1) begin
                 StoreQueue[i].age   <= 0;
                 StoreQueue[i].addr  <= 0;
                 StoreQueue[i].data  <= 0;
                 StoreQueue[i].valid <= 1'b0;
             end
+            store_count <= 0;
         end
         else if(flush) begin
-            head_store  <= 0;
-            tail_store  <= 0;
-            store_count <= 0;
             for(i = 0; i < FIFO_DEPTH; i = i + 1) begin
                 StoreQueue[i].age   <= 0;
                 StoreQueue[i].addr  <= 0;
                 StoreQueue[i].data  <= 0;
                 StoreQueue[i].valid <= 1'b0;
             end
+            store_count <= 0;
         end
         else begin
             if(store_valid) begin
-                // simple implementation: store at index rob_id % 16
-                tail_store <= tail_store + 1;
-                StoreQueue[tail_store].age   <= current_age;
-                StoreQueue[tail_store].addr  <= store_waddr;
-                StoreQueue[tail_store].data  <= store_wdata;
-                StoreQueue[tail_store].valid <= 1'b1;
+                StoreQueue[free_store_id].age   <= current_age;
+                StoreQueue[free_store_id].addr  <= store_waddr;
+                StoreQueue[free_store_id].data  <= store_wdata;
+                StoreQueue[free_store_id].valid <= 1'b1;
             end
 
             if(retire_store_valid) begin
-                head_store <= head_store + 1;
-                StoreQueue[head_store].valid <= 1'b0;
+                StoreQueue[retire_store_id].valid <= 1'b0;
                 mem_write_en <= 1'b1;
-                mem_waddr    <= StoreQueue[head_store].addr;
-                mem_wdata    <= StoreQueue[head_store].data;
+                mem_waddr    <= StoreQueue[retire_store_id].addr;
+                mem_wdata    <= StoreQueue[retire_store_id].data;
             end
             else begin
                 mem_write_en <= 1'b0;

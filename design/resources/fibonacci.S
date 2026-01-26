@@ -7,7 +7,7 @@
 main:
 ## write assembly code here.
 ## call fibonacci function and get return value.
-	li a0, 15
+	li a0, 12
     addi sp, sp, -4		
     sw a0, 0(sp)		# store n
     jal fibonacci		# fibonacci(n)
@@ -23,10 +23,8 @@ fibonacci:
     sw a0, 4(sp)		# store n
 	sw x0, 8(sp)		# return value
     
-    li t0, 0
-    beq a0, t0, ret_zero# if(n == 0)
     li t0, 1
-    beq a0, t0, ret_one # if(n == 1)
+    bge t0, a0, ret_n   # if(n <= 1) return n
 
     lw t1, 4(sp)		# load n
     addi a0, t1, -1		# n-1	
@@ -43,13 +41,8 @@ fibonacci:
     addi sp, sp, 12     # pop out the stack pointer 
     jr ra               # back to the return address
 
-ret_zero:   
-    mv a0, x0           # return 0
-    lw ra, 0(sp)        # load return address
-    addi sp, sp, 12     # pop out the stack pointer
-    jr ra               # back to the return address
-ret_one:
-    li a0, 1		    # return 1
+ret_n:   
+    add a0, a0, x0      # return n
     lw ra, 0(sp)        # load return address
     addi sp, sp, 12     # pop out the stack pointer
     jr ra               # back to the return address

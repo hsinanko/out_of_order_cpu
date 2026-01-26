@@ -41,6 +41,7 @@ EXE = \
 		../src/Issue/Issue.sv \
 		../src/Issue/Execution/Execution.sv
 WB = \
+		../src/WriteBack/FreeEntry.sv \
 		../src/WriteBack/LoadStoreQueue.sv \
 		../src/WriteBack/WriteBack.sv
 
