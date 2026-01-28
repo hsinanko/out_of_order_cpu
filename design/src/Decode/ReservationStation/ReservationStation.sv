@@ -11,11 +11,9 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_RE
     // ====== dispatch instruction ======
     // first instruction
     input instruction_t dispatch_instruction_0,
-    input logic [ROB_WIDTH-1:0] rob_id_0,
     input logic dispatch_valid_0,
     // second instruction
     input instruction_t dispatch_instruction_1,
-    input logic [ROB_WIDTH-1:0] rob_id_1,
     input logic dispatch_valid_1,
     // RS --> issue
     output RS_ENTRY_t issue_instruction,
@@ -74,35 +72,36 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_RE
         else begin
             // Dispatch first instruction
             if(dispatch_valid_0)begin
-                RS[free_slot_0].addr           <= dispatch_instruction_0.instruction_addr;
-                RS[free_slot_0].rob_id         <= rob_id_0;
+                RS[free_slot_0].addr           <= dispatch_instruction_0.addr;
+                RS[free_slot_0].opcode         <= dispatch_instruction_0.opcode;
                 RS[free_slot_0].funct7         <= dispatch_instruction_0.funct7;
                 RS[free_slot_0].funct3         <= dispatch_instruction_0.funct3;
                 RS[free_slot_0].rs1_phy        <= dispatch_instruction_0.rs1_addr;
                 RS[free_slot_0].rs2_phy        <= dispatch_instruction_0.rs2_addr;
                 RS[free_slot_0].rd_phy         <= dispatch_instruction_0.rd_addr;
                 RS[free_slot_0].immediate      <= dispatch_instruction_0.immediate;
-                RS[free_slot_0].opcode         <= dispatch_instruction_0.opcode;
                 RS[free_slot_0].predict_taken  <= dispatch_instruction_0.predict_taken;
                 RS[free_slot_0].predict_target <= dispatch_instruction_0.predict_target;
+                RS[free_slot_0].rob_id         <= dispatch_instruction_0.rob_id;
+                RS[free_slot_0].valid          <= dispatch_instruction_0.valid;
                 RS[free_slot_0].age            <= global_age;
-                RS[free_slot_0].valid          <= 1'b1;
+
             end
             // Dispatch second instruction
             if(dispatch_valid_1)begin 
-                RS[free_slot_1].addr           <= dispatch_instruction_1.instruction_addr;
-                RS[free_slot_1].rob_id         <= rob_id_1;
+                RS[free_slot_1].addr           <= dispatch_instruction_1.addr;
+                RS[free_slot_1].opcode         <= dispatch_instruction_1.opcode;
                 RS[free_slot_1].funct7         <= dispatch_instruction_1.funct7;
                 RS[free_slot_1].funct3         <= dispatch_instruction_1.funct3;
                 RS[free_slot_1].rs1_phy        <= dispatch_instruction_1.rs1_addr;
                 RS[free_slot_1].rs2_phy        <= dispatch_instruction_1.rs2_addr;
                 RS[free_slot_1].rd_phy         <= dispatch_instruction_1.rd_addr;
                 RS[free_slot_1].immediate      <= dispatch_instruction_1.immediate;
-                RS[free_slot_1].opcode         <= dispatch_instruction_1.opcode;
                 RS[free_slot_1].predict_taken  <= dispatch_instruction_1.predict_taken;  // this should not happen in BRU
                 RS[free_slot_1].predict_target <= dispatch_instruction_1.predict_target; // this should not happen in BRU
-                RS[free_slot_1].age            <= (dispatch_valid_0) ? global_age+1: global_age;
+                RS[free_slot_1].rob_id         <= dispatch_instruction_1.rob_id;
                 RS[free_slot_1].valid          <= 1'b1;
+                RS[free_slot_1].age            <= (dispatch_valid_0) ? global_age+1: global_age;
             end
 
             

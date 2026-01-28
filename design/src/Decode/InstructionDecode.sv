@@ -7,7 +7,7 @@ module InstructionDecode #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
     output instruction_t          decoded_instruction
 );
     
-    assign decoded_instruction.instruction_addr = instruction_addr;
+    assign decoded_instruction.addr = instruction_addr;
     assign decoded_instruction.opcode = instruction[6:0];
 
     always_comb begin

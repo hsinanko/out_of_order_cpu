@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 package instruction_pkg;
 
     typedef enum logic [3:0]{

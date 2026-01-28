@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 package info_pkg; 
     import parameter_pkg::*;
     import typedef_pkg::*;

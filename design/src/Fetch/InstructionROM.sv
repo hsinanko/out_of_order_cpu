@@ -9,7 +9,7 @@ module InstructionROM #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, INSTR_MEM_SI
     output logic [ADDR_WIDTH-1:0] instruction_addr_1,    // instruction address 1
     output logic [DATA_WIDTH-1:0] instruction_0,         // instruction 0 
     output logic [DATA_WIDTH-1:0] instruction_1,         // instruction 1
-    output logic [1:0]            instruction_valid,
+    output logic [1:0]            instruction_valid
 );
 
 

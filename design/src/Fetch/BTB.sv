@@ -12,10 +12,7 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
     output logic                     predict_taken_1,
     output logic [ADDR_WIDTH-1:0]    predict_target_1,
     // Input from Commit Stage
-    input  logic                     update_valid,
-    input  logic [ADDR_WIDTH-1:0]    update_btb_pc,
-    input  logic                     update_btb_taken,
-    input  logic [ADDR_WIDTH-1:0]    update_btb_target
+    retire_if.retire_branch_sink   retire_branch_bus
 );
 
     // BTB Entry Structure
@@ -32,7 +29,7 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
     logic [BTB_WIDTH-1:0] index;
     logic [BTB_WIDTH-1:0] update_index;
 
-    assign update_index = update_btb_pc[BTB_WIDTH+1:2];
+    assign update_index = retire_branch_bus.update_btb_pc[BTB_WIDTH+1:2];
     // Predict Logic
     always_comb begin
         if (pc_valid) begin
@@ -75,11 +72,11 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
                 btb[i].target <= '0;
                 btb[i].tag <= '0;
             end
-        end else if (update_valid) begin
+        end else if (retire_branch_bus.retire_branch_valid) begin
             btb[update_index].valid  <= 1;
-            btb[update_index].taken  <= update_btb_taken;
-            btb[update_index].target <= update_btb_target;
-            btb[update_index].tag    <= update_btb_pc[ADDR_WIDTH-1:BTB_WIDTH+2];
+            btb[update_index].taken  <= retire_branch_bus.update_btb_taken;
+            btb[update_index].target <= retire_branch_bus.update_btb_target;
+            btb[update_index].tag    <= retire_branch_bus.update_btb_pc[ADDR_WIDTH-1:BTB_WIDTH+2];
         end
     end
 

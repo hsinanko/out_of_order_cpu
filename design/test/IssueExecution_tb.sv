@@ -27,7 +27,7 @@ module IssueExecution_tb();
 
     always #5 clk = ~clk; // Clock generation
 
-    O3O_CPU #(ADDR_WIDTH, 
+    CPU #(ADDR_WIDTH, 
               DATA_WIDTH, 
               ARCH_REGS,
               PHY_REGS,
@@ -120,7 +120,7 @@ module IssueExecution_tb();
             print_CPU_State(1);
             $finish;
         end
-        else if(n_cycles >= 20000) begin
+        else if(n_cycles >= 4000) begin
             $display("\n\t=========== Max cycle reached, ending simulation ===========\n");
             print_CPU_State(0);
             $finish;

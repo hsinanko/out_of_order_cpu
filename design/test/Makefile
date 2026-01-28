@@ -8,6 +8,14 @@ PKG = \
 		../src/package/instruction_pkg.sv \
 		../src/package/info_pkg.sv \
 		../src/package/debug_pkg.sv
+
+INT = \
+		../src/interface/writeback_if.sv \
+		../src/interface/execution_if.sv \
+		../src/interface/physical_if.sv \
+		../src/interface/rename_if.sv \
+		../src/interface/retire_if.sv
+
 COM = \
 		../src/common/Back_RAT.sv \
 		../src/common/Control.sv \
@@ -21,8 +29,7 @@ COM = \
 		
 IF = \
 		../src/Fetch/BTB.sv \
-		../src/Fetch/InstructionROM.sv \
-		../src/Fetch/InstructionFetch.sv
+		../src/Fetch/InstructionROM.sv
 
 ID = \
 		../src/Decode/ReservationStation/FreeSlot.sv \
@@ -37,7 +44,6 @@ EXE = \
 		../src/Issue/Execution/ALUUnit/ALU.sv \
 		../src/Issue/Execution/BranchUnit/BranchUnit.sv \
 		../src/Issue/Execution/MEMUnit/AddressGenerator.sv \
-		../src/Issue/IssueFIFO.sv \
 		../src/Issue/Issue.sv \
 		../src/Issue/Execution/Execution.sv
 WB = \
@@ -49,15 +55,20 @@ RE = \
 		../src/Retire/Retire.sv
 
 TB ?= IssueExecution_tb
-VFLAGS = --binary -sv --trace -Wall -Wno-fatal \
-						-o  $(TB) \
-							$(PKG) \
-							$(COM) \
-							$(IF) \
-							$(ID) \
-							$(EXE) \
-							$(WB) \
-							$(RE)
+VFLAGS = --binary \
+		 -sv \
+		 --trace \
+		 -Wall \
+		 -Wno-fatal \
+		 -o  $(TB) \
+			 $(PKG) \
+			 $(INT) \
+			 $(COM) \
+			 $(IF) \
+			 $(ID) \
+			 $(EXE) \
+			 $(WB) \
+			 $(RE)
 
 
 TEST ?= fibonacci

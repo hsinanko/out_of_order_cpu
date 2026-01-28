@@ -8,13 +8,10 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
     output logic full,
     output logic empty,
     // rename interface to allocate physical registers
-    input logic [1:0]valid,
-    output logic [PHY_WIDTH-1:0] rd_phy_new_0,           // physical register address to allocate
-    output logic [PHY_WIDTH-1:0] rd_phy_new_1,            // physical register address to allocate
+    rename_if.freelist_sink freelist_0_bus,
+    rename_if.freelist_sink freelist_1_bus,
     // commit interface to free physical registers (handled in Back_RAT
-    input logic retire_valid,
-    input logic [PHY_WIDTH-1:0] rd_phy_old_commit,
-    input logic [PHY_WIDTH-1:0] rd_phy_new_commit
+    retire_if.retire_pr_sink retire_pr_bus
 );
     integer i;
 
@@ -51,9 +48,9 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
         if(rst || flush) num_free = FREE_REG;
         else begin
             num_free = num_free_reg;
-            if(retire_valid) num_free = num_free + 1;
-            if(valid == 2'b11) num_free = num_free - 2;
-            else if(valid == 2'b01 || valid == 2'b10) num_free = num_free - 1;
+            if(retire_pr_bus.retire_pr_valid) num_free = num_free + 1;
+            if(freelist_0_bus.valid && freelist_1_bus.valid) num_free = num_free - 2;
+            else if(freelist_0_bus.valid || freelist_1_bus.valid) num_free = num_free - 1;
         end
     end
 
@@ -78,12 +75,12 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
         else begin
             // Allocate physical registers for renaming
             num_free_reg <= num_free;
-            if(valid == 2'b11) begin
+            if(freelist_0_bus.valid && freelist_1_bus.valid) begin
                 head     <= head + 2;
                 is_busy[FREELIST[head]]     <= 1'b1;
                 is_busy[FREELIST[head + 1]] <= 1'b1;
             end
-            else if(valid == 2'b01 || valid == 2'b10) begin
+            else if(freelist_0_bus.valid || freelist_1_bus.valid) begin
                 head     <= head + 1;
                 is_busy[FREELIST[head]]     <= 1'b1;
             end
@@ -92,10 +89,10 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
             end
 
 
-            if(retire_valid) begin
+            if(retire_pr_bus.retire_pr_valid) begin
             // Free physical registers on commit
-                FREELIST[tail + 1] <= rd_phy_old_commit;
-                is_busy[rd_phy_new_commit] <= 1'b0;
+                FREELIST[tail + 1] <= retire_pr_bus.rd_phy_old;
+                is_busy[retire_pr_bus.rd_phy_new] <= 1'b0;
                 tail     <= tail + 1;
             end
 
@@ -103,8 +100,8 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
     end
 
 
-    assign rd_phy_new_0 = (valid[0]) ? (FREELIST[head]): 'hx;        // +1 to skip PHY_ZERO
-    assign rd_phy_new_1 = (valid[1]) ? ((valid[0]) ? (FREELIST[head + 1]) : (FREELIST[head])) : 'hx;    // +1 to skip PHY_ZERO
+    assign freelist_0_bus.rd_phy_new = (freelist_0_bus.valid) ? (FREELIST[head]): 'hx;        // +1 to skip PHY_ZERO
+    assign freelist_1_bus.rd_phy_new = (freelist_1_bus.valid) ? ((freelist_0_bus.valid) ? (FREELIST[head + 1]) : (FREELIST[head])) : 'hx;    // +1 to skip PHY_ZERO
 
 
     // For debugging: dump Freelist contents at each clock cycle

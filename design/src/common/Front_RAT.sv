@@ -5,23 +5,11 @@ module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     input  logic rst,
     input  logic flush,
     input  logic done,
-    // first instruction
-    input  logic [1:0]instr_valid,      // instr_valid[0] = first instruction valid, instr_valid[1] = second instruction valid
-    input  logic [4:0] rs1_arch_0,      // architected register address
-    input  logic [4:0] rs2_arch_0,
-    input  logic [4:0] rd_arch_0,
-    input  logic [PHY_WIDTH-1:0] rd_phy_new_0,    // physical register address to allocate
-    output logic [PHY_WIDTH-1:0] rs1_phy_0,
-    output logic [PHY_WIDTH-1:0] rs2_phy_0,
-    output logic [PHY_WIDTH-1:0] rd_phy_0,
-    // second instruction
-    input  logic [4:0] rs1_arch_1,      // architected register address
-    input  logic [4:0] rs2_arch_1,
-    input  logic [4:0] rd_arch_1,
-    input  logic [PHY_WIDTH-1:0] rd_phy_new_1,    // physical register address to allocate
-    output logic [PHY_WIDTH-1:0] rs1_phy_1,
-    output logic [PHY_WIDTH-1:0] rs2_phy_1,
-    output logic [PHY_WIDTH-1:0] rd_phy_1,
+    rename_if.rat_sink rat_0_bus,
+    rename_if.rat_sink rat_1_bus,
+    rename_if.freelist_sink freelist_0_bus,
+    rename_if.freelist_sink freelist_1_bus,
+    // ======== from BACK_RAT =======================
     // BACK_RAT will handle commit updates
     input  logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat,
     // ======== for debugging output =================
@@ -42,12 +30,12 @@ module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
 
 
     always_latch begin
-        rs1_phy_0 = FRONT_RAT[rs1_arch_0];
-        rs2_phy_0 = FRONT_RAT[rs2_arch_0];
-        rd_phy_0  = FRONT_RAT[rd_arch_0];
-        rs1_phy_1 = (instr_valid[0] && rs1_arch_1 == rd_arch_0) ? rd_phy_new_0 : FRONT_RAT[rs1_arch_1];
-        rs2_phy_1 = (instr_valid[0] && rs2_arch_1 == rd_arch_0) ? rd_phy_new_0 : FRONT_RAT[rs2_arch_1];
-        rd_phy_1  = (instr_valid[0] && rd_arch_1 == rd_arch_0)  ? rd_phy_new_0 : FRONT_RAT[rd_arch_1];
+        rat_0_bus.rs1_phy = FRONT_RAT[rat_0_bus.rs1_arch];
+        rat_0_bus.rs2_phy = FRONT_RAT[rat_0_bus.rs2_arch];
+        rat_0_bus.rd_phy  = FRONT_RAT[rat_0_bus.rd_arch];
+        rat_1_bus.rs1_phy = (rat_0_bus.valid && rat_1_bus.rs1_arch == rat_0_bus.rd_arch) ? freelist_0_bus.rd_phy_new : FRONT_RAT[rat_1_bus.rs1_arch];
+        rat_1_bus.rs2_phy = (rat_0_bus.valid && rat_1_bus.rs2_arch == rat_0_bus.rd_arch) ? freelist_0_bus.rd_phy_new : FRONT_RAT[rat_1_bus.rs2_arch];
+        rat_1_bus.rd_phy  = (rat_0_bus.valid && rat_1_bus.rd_arch == rat_0_bus.rd_arch)  ? freelist_0_bus.rd_phy_new : FRONT_RAT[rat_1_bus.rd_arch];
     end
 
 
@@ -72,12 +60,12 @@ module Front_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
         end
         else begin
             // Update RAT for first instruction
-            if (instr_valid[0]) begin
-                FRONT_RAT[rd_arch_0] <= rd_phy_new_0;
+            if (rat_0_bus.valid) begin
+                FRONT_RAT[rat_0_bus.rd_arch] <= freelist_0_bus.rd_phy_new;
             end
             // Update RAT for second instruction
-            if (instr_valid[1]) begin
-                FRONT_RAT[rd_arch_1] <= rd_phy_new_1;
+            if (rat_1_bus.valid) begin
+                FRONT_RAT[rat_1_bus.rd_arch] <= freelist_1_bus.rd_phy_new;
             end
         end
 

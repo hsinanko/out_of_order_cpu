@@ -17,18 +17,18 @@ module FreeEntry #(parameter FIFO_DEPTH = 16)(
     logic [$clog2(FIFO_DEPTH)-1:0] head;                         // points to the next free entry
     logic [$clog2(FIFO_DEPTH)-1:0] tail;                         // points to the next allocated entry
     logic [$clog2(FIFO_DEPTH):0] num_free;                     // number of free entries
-    logic [$clog2(FIFO_DEPTH):0] num_free_reg;           
+    logic [$clog2(FIFO_DEPTH):0] num_free_tmp;           
     integer i;
 
     assign is_empty = (num_free == FIFO_DEPTH);
     assign is_full  = (num_free == 0);
 
     always_comb begin
-        if(rst || flush) num_free = FIFO_DEPTH;
+        if(rst || flush) num_free_tmp = FIFO_DEPTH;
         else begin
-            num_free = num_free_reg;
-            if(valid) num_free = num_free - 1;
-            if(retire_store_valid) num_free = num_free + 1;
+            num_free_tmp = num_free;
+            if(valid) num_free_tmp = num_free_tmp - 1;
+            if(retire_store_valid) num_free_tmp = num_free_tmp + 1;
         end
     end
 
@@ -40,7 +40,7 @@ module FreeEntry #(parameter FIFO_DEPTH = 16)(
             end
             head         <= 0;
             tail         <= FIFO_DEPTH - 1;
-            num_free_reg <= FIFO_DEPTH;
+            num_free <= FIFO_DEPTH;
         end
         else if(flush) begin
             // On flush, reset head and tail pointers
@@ -49,11 +49,11 @@ module FreeEntry #(parameter FIFO_DEPTH = 16)(
             end
             head         <= 0;
             tail         <= FIFO_DEPTH - 1;
-            num_free_reg <= FIFO_DEPTH;
+            num_free <= FIFO_DEPTH;
         end
         else begin
             // Allocate physical registers for renaming
-            num_free_reg <= num_free;
+            num_free <= num_free_tmp;
             if(valid) begin
                 head <= head + 1;
             end

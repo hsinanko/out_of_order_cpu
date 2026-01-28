@@ -16,41 +16,15 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
     // ========= read execution interface ===============
     output logic [PHY_REGS-1:0]PRF_valid,
     // alu
-    input  logic [PHY_WIDTH-1:0]rs1_phy_alu,               
-    input  logic [PHY_WIDTH-1:0]rs2_phy_alu,
-    output logic [DATA_WIDTH-1:0]rs1_data_alu,
-    output logic [DATA_WIDTH-1:0]rs2_data_alu,
-    input  logic alu_valid,
+    physical_if.sink  alu_prf_bus,
     // load/store
-    input  logic [PHY_WIDTH-1:0]rs1_phy_ls,               
-    input  logic [PHY_WIDTH-1:0]rs2_phy_ls,
-    output logic [DATA_WIDTH-1:0]rs1_data_ls,
-    output logic [DATA_WIDTH-1:0]rs2_data_ls,
-    input  logic ls_valid,
+    physical_if.sink  lsu_prf_bus,
     // branch
-    input  logic [PHY_WIDTH-1:0]rs1_phy_branch,               
-    input  logic [PHY_WIDTH-1:0]rs2_phy_branch,
-    output logic [DATA_WIDTH-1:0]rs1_data_branch,
-    output logic [DATA_WIDTH-1:0]rs2_data_branch,
-    input  logic branch_valid,
+    physical_if.sink  branch_prf_bus,
     // =========== writeback interface =================
-    // alu commit interface
-    input  logic commit_alu_valid,                     // commit enable signal
-    input  logic [PHY_WIDTH-1:0]commit_rd_alu,                 // physical register address to commit
-    input  logic [DATA_WIDTH-1:0]commit_alu_result,     // data to write
-    // load/store commit interface
-    input  logic commit_load_valid,                       // commit enable signal
-    input  logic [PHY_WIDTH-1:0]commit_rd_load,                  // physical register address to commit
-    input  logic [DATA_WIDTH-1:0]commit_load_rdata, // data to write
-    // branch commit interface
-    input  logic commit_jump_valid,                   // commit enable 
-    input  logic commit_branch_valid,
-    input  logic [PHY_WIDTH-1:0]commit_rd_branch,              // physical register address to commit
-    input  logic [DATA_WIDTH-1:0]commit_nextPC, // data to write
+    writeback_if.sink wb_to_prf_bus,
     // ============= commit /retire interface ====================
-    input logic [PHY_WIDTH-1:0]rd_phy_old_commit,
-    input logic [PHY_WIDTH-1:0]rd_phy_new_commit,
-    input logic retire_valid,
+    retire_if.retire_pr_sink retire_pr_bus,
     // === debugging interface =========================
     output logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out,
     output logic [PHY_REGS-1:0]PRF_busy_out,
@@ -83,14 +57,14 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
 
 
     // ========== execution stage (read data from PRF) =========
-    assign rs1_data_alu = (alu_valid) ? PRF[rs1_phy_alu] : 'hx;
-    assign rs2_data_alu = (alu_valid) ? PRF[rs2_phy_alu] : 'hx;
+    assign alu_prf_bus.rs1_data = (alu_prf_bus.valid) ? PRF[alu_prf_bus.rs1_phy] : 'hx;
+    assign alu_prf_bus.rs2_data = (alu_prf_bus.valid) ? PRF[alu_prf_bus.rs2_phy] : 'hx;
 
-    assign rs1_data_ls = (ls_valid) ? PRF[rs1_phy_ls] : 'hx;
-    assign rs2_data_ls = (ls_valid) ? PRF[rs2_phy_ls] : 'hx;
+    assign lsu_prf_bus.rs1_data = (lsu_prf_bus.valid) ? PRF[lsu_prf_bus.rs1_phy] : 'hx;
+    assign lsu_prf_bus.rs2_data = (lsu_prf_bus.valid) ? PRF[lsu_prf_bus.rs2_phy] : 'hx;
 
-    assign rs1_data_branch = (branch_valid) ? PRF[rs1_phy_branch] : 'hx;
-    assign rs2_data_branch = (branch_valid) ? PRF[rs2_phy_branch] : 'hx;
+    assign branch_prf_bus.rs1_data = (branch_prf_bus.valid) ? PRF[branch_prf_bus.rs1_phy] : 'hx;
+    assign branch_prf_bus.rs2_data = (branch_prf_bus.valid) ? PRF[branch_prf_bus.rs2_phy] : 'hx;
 
     // ============== commit stage =====================
 
@@ -120,30 +94,30 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
                 PRF_valid[rd_phy_busy_1] <= 0;
             end
 
-            if(commit_alu_valid)begin
-                PRF[commit_rd_alu]       <= commit_alu_result;
-                PRF_valid[commit_rd_alu] <= 1;
+            if(wb_to_prf_bus.alu_valid)begin
+                PRF[wb_to_prf_bus.rd_alu]       <= wb_to_prf_bus.alu_result;
+                PRF_valid[wb_to_prf_bus.rd_alu] <= 1;
             end
-            if(commit_load_valid)begin
-                PRF[commit_rd_load]       <= commit_load_rdata;
-                PRF_valid[commit_rd_load] <= 1;
+            if(wb_to_prf_bus.load_valid)begin
+                PRF[wb_to_prf_bus.rd_load]       <= wb_to_prf_bus.load_rdata;
+                PRF_valid[wb_to_prf_bus.rd_load] <= 1;
             end
-            if(commit_jump_valid)begin
-                if(commit_rd_branch != '0)begin
-                    PRF[commit_rd_branch]       <= commit_nextPC;
-                    PRF_valid[commit_rd_branch] <= 1;
+            if(wb_to_prf_bus.jump_valid)begin
+                if(wb_to_prf_bus.rd_branch != '0)begin
+                    PRF[wb_to_prf_bus.rd_branch]       <= wb_to_prf_bus.nextPC;
+                    PRF_valid[wb_to_prf_bus.rd_branch] <= 1;
                 end
             end
-            if(commit_branch_valid)begin
-                PRF_valid[commit_rd_branch] <= 1;
+            if(wb_to_prf_bus.branch_valid)begin
+                PRF_valid[wb_to_prf_bus.rd_branch] <= 1;
             end
-            if(retire_valid) begin
-                if(!PRF_busy[rd_phy_old_commit])begin
-                    PRF_valid[rd_phy_old_commit] <= 0;
-                    PRF_busy[rd_phy_new_commit]  <= 0;
+            if(retire_pr_bus.retire_pr_valid) begin
+                if(!PRF_busy[retire_pr_bus.rd_phy_old])begin
+                    PRF_valid[retire_pr_bus.rd_phy_old] <= 0;
+                    PRF_busy[retire_pr_bus.rd_phy_new]  <= 0;
                 end
                 else begin
-                    PRF_busy[rd_phy_new_commit]  <= 0;
+                    PRF_busy[retire_pr_bus.rd_phy_new]  <= 0;
                 end
             end
         end

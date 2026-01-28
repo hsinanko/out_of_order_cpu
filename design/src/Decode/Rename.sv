@@ -22,30 +22,17 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
     input  logic predict_taken_1,
     input  logic [ADDR_WIDTH-1:0] predict_target_1,
     //======== Front RAT =============================
-    output logic [1:0] instr_valid,     // front RAT
-    output logic [4:0] rs1_arch_0,      // architected register address
-    output logic [4:0] rs2_arch_0,
-    output logic [4:0] rd_arch_0,
-    input  logic [PHY_WIDTH-1:0] rs1_phy_0,
-    input  logic [PHY_WIDTH-1:0] rs2_phy_0,
-    input  logic [PHY_WIDTH-1:0] rd_phy_0,
-    output logic [4:0] rs1_arch_1,                // architected register address
-    output logic [4:0] rs2_arch_1,
-    output logic [4:0] rd_arch_1,
-    input  logic [PHY_WIDTH-1:0] rs1_phy_1,
-    input  logic [PHY_WIDTH-1:0] rs2_phy_1,
-    input  logic [PHY_WIDTH-1:0] rd_phy_1,
+    rename_if.rat_source rat_0_bus,
+    rename_if.rat_source rat_1_bus,
     //======== Free List =================
-    output logic [1:0] free_list_valid, // free list valid signals for both instructions
-    input logic [PHY_WIDTH-1:0] rd_phy_new_0,
-    input logic [PHY_WIDTH-1:0] rd_phy_new_1,
+    rename_if.freelist_source freelist_0_bus,
+    rename_if.freelist_source freelist_1_bus,
     //======== Reorder Buffer =================
     // rename/dispatch
-    output logic [1:0]          dispatch_valid,
-    output ROB_ENTRY_t           dispatch_rob_0,         // entry to be added
+    output ROB_ENTRY_t           rob_entry_0,         // entry to be added
     input  logic [ROB_WIDTH-1:0] rob_id_0,
     // second instruction
-    output ROB_ENTRY_t           dispatch_rob_1,         // entry to be added
+    output ROB_ENTRY_t           rob_entry_1,         // entry to be added
     input  logic [ROB_WIDTH-1:0] rob_id_1,
 
     //======== Physical Register File =================
@@ -82,50 +69,42 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
     // ========== Front RAT =================
 
     // first instruction
-    assign rd_arch_0  = instr_0.rd_addr;
-    assign rs1_arch_0 = instr_0.rs1_addr;
-    assign rs2_arch_0 = instr_0.rs2_addr;
-    assign rd_arch_0  = instr_0.rd_addr;
+    assign rat_0_bus.rd_arch  = instr_0.rd_addr;
+    assign rat_0_bus.rs1_arch = instr_0.rs1_addr;
+    assign rat_0_bus.rs2_arch = instr_0.rs2_addr;
+    assign rat_0_bus.rd_arch  = instr_0.rd_addr;
     // second instruction
-    assign rd_arch_1  = instr_1.rd_addr;
-    assign rs1_arch_1 = instr_1.rs1_addr;
-    assign rs2_arch_1 = instr_1.rs2_addr;
-    assign rd_arch_1  = instr_1.rd_addr;
-
-
-    always_comb begin
-        if(stall_dispatch) begin
-            instr_valid = 2'b00;
-        end
-        else begin
-            case(instr_0.opcode)
-                STORE: instr_valid[0] = 1'b0;
-                BRANCH: instr_valid[0] = 1'b0;
-                default: instr_valid[0] = instruction_valid[0];
-            endcase
-
-            case(instr_1.opcode)
-                STORE: instr_valid[1] = 1'b0;
-                BRANCH: instr_valid[1] = 1'b0;
-                default: instr_valid[1] = instruction_valid[1];
-            endcase
-        end
-    end
+    assign rat_1_bus.rd_arch  = instr_1.rd_addr;
+    assign rat_1_bus.rs1_arch = instr_1.rs1_addr;
+    assign rat_1_bus.rs2_arch = instr_1.rs2_addr;
+    assign rat_1_bus.rd_arch  = instr_1.rd_addr;
 
 
     logic isRename_0, isRename_1;
-    assign isRename_0 = (instr_0.opcode != STORE && instr_0.opcode != BRANCH && instr_0.opcode != SYSTEM) && (rd_arch_0 != 5'd0);
-    assign isRename_1 = (instr_1.opcode != STORE && instr_1.opcode != BRANCH && instr_1.opcode != SYSTEM) && (rd_arch_1 != 5'd0);
+    assign isRename_0 = (instr_0.opcode != STORE && instr_0.opcode != BRANCH && instr_0.opcode != SYSTEM) && (rat_0_bus.rd_arch != 5'd0);
+    assign isRename_1 = (instr_1.opcode != STORE && instr_1.opcode != BRANCH && instr_1.opcode != SYSTEM) && (rat_1_bus.rd_arch != 5'd0);
+
+    always_comb begin
+        if(flush || stall_dispatch) begin
+            rat_0_bus.valid = 1'b0;
+            rat_1_bus.valid = 1'b0;
+        end
+        else begin
+            rat_0_bus.valid = (instruction_valid[0] && isRename_0);
+            rat_1_bus.valid = (instruction_valid[1] && isRename_1);
+        end
+    end
+
     //=========== Freelist =================
 
     always_comb begin
-        if(flush)
-            free_list_valid = 2'b00;
-        else if(stall_dispatch)
-            free_list_valid = 2'b00;
+        if(flush || stall_dispatch)begin
+            freelist_0_bus.valid = 1'b0;
+            freelist_1_bus.valid = 1'b0;
+        end
         else begin
-            free_list_valid[0] = (instruction_valid[0] && isRename_0);
-            free_list_valid[1] = (instruction_valid[1] && isRename_1);
+            freelist_0_bus.valid = (instruction_valid[0] && isRename_0);
+            freelist_1_bus.valid = (instruction_valid[1] && isRename_1);
         end
     end
 
@@ -143,86 +122,65 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
             busy_valid[1] = (instruction_valid[1] && isRename_1);
         end
     end
-    assign rd_phy_busy_0 = (busy_valid[0]) ? rd_phy_new_0 : 'h0;
-    assign rd_phy_busy_1 = (busy_valid[1]) ? rd_phy_new_1 : 'h0;
+    assign rd_phy_busy_0 = (busy_valid[0]) ? freelist_0_bus.rd_phy_new : 'h0;
+    assign rd_phy_busy_1 = (busy_valid[1]) ? freelist_1_bus.rd_phy_new : 'h0;
 
     //=========== Reorder Buffer =================
     // Reorder Buffer inputs/outputs
 
-    always_comb begin
-        if(flush)
-            dispatch_valid = 2'b00;
-        else if(stall_dispatch)
-            dispatch_valid = 2'b00;
-        else
-            dispatch_valid = instruction_valid;
-    end
     //========== First instruction =================
-    assign dispatch_rob_0.rd_arch    = rd_arch_0;
-    assign dispatch_rob_0.rd_phy_old = rd_phy_0;
-    assign dispatch_rob_0.rd_phy_new = rd_phy_new_0;
-    assign dispatch_rob_0.opcode     = instr_0.opcode;
-    assign dispatch_rob_0.actual_target = 'h0; // to be updated at commit stage
-    assign dispatch_rob_0.actual_taken = 1'b0;
-    assign dispatch_rob_0.update_pc    = 'h0;
-    assign dispatch_rob_0.mispredict = 1'b0;
+    assign rob_entry_0.rd_arch       = rat_0_bus.rd_arch;
+    assign rob_entry_0.rd_phy_old    = rat_0_bus.rd_phy;
+    assign rob_entry_0.rd_phy_new    = freelist_0_bus.rd_phy_new;
+    assign rob_entry_0.opcode        = instr_0.opcode;
+    assign rob_entry_0.actual_target = 'h0; // to be updated at commit stage
+    assign rob_entry_0.actual_taken  = 1'b0;
+    assign rob_entry_0.update_pc     = 'h0;
+    assign rob_entry_0.mispredict    = 1'b0;
+    assign rob_entry_0.valid         = (flush || stall_dispatch) ? 1'b0 : instruction_valid[0];
     // debugging info
-    assign dispatch_rob_0.addr = instruction_addr_0;
+    assign rob_entry_0.addr          = instr_0.addr;
     //========== Second instruction =================
-    assign dispatch_rob_1.rd_arch    = rd_arch_1;
-    assign dispatch_rob_1.rd_phy_old = rd_phy_1;
-    assign dispatch_rob_1.rd_phy_new = rd_phy_new_1;
-    assign dispatch_rob_1.opcode     = instr_1.opcode;
-    assign dispatch_rob_1.actual_target = 'h0; // to be updated at commit stage
-    assign dispatch_rob_1.actual_taken = 1'b0;
-    assign dispatch_rob_1.update_pc    = 'h0;
-    assign dispatch_rob_1.mispredict = 1'b0;
+    assign rob_entry_1.rd_arch       = rat_1_bus.rd_arch;
+    assign rob_entry_1.rd_phy_old    = rat_1_bus.rd_phy;
+    assign rob_entry_1.rd_phy_new    = freelist_1_bus.rd_phy_new;
+    assign rob_entry_1.opcode        = instr_1.opcode;
+    assign rob_entry_1.actual_target = 'h0; // to be updated at commit stage
+    assign rob_entry_1.actual_taken  = 1'b0;
+    assign rob_entry_1.update_pc     = 'h0;
+    assign rob_entry_1.mispredict    = 1'b0;
+    assign rob_entry_1.valid         = (flush || stall_dispatch) ? 1'b0 : instruction_valid[1];
     // debugging info
-    assign dispatch_rob_1.addr = instruction_addr_1;
+    assign rob_entry_1.addr = instr_1.addr;
     // ============= Decode / Dispatch Stage ==============
-    logic [1:0]rename_valid;
     instruction_t rename_instruction_0;
-    logic [ROB_WIDTH-1:0] rename_rob_id_0;
     instruction_t rename_instruction_1;
-    logic [ROB_WIDTH-1:0] rename_rob_id_1;
 
-    assign rename_rob_id_0 = rob_id_0;
-    assign rename_rob_id_1 = rob_id_1;
-
-    always_comb begin
-        if(flush) begin
-            rename_valid = 2'b00;
-        end
-        else if(stall_dispatch)begin
-            rename_valid = 2'b00;
-        end
-        else begin
-            rename_valid = instruction_valid;
-        end
-    end
-
-    assign rename_instruction_0.instruction_addr = instr_0.instruction_addr;
-    assign rename_instruction_0.opcode           = instr_0.opcode;
-    assign rename_instruction_0.funct3           = instr_0.funct3;
-    assign rename_instruction_0.funct7           = instr_0.funct7;
-    assign rename_instruction_0.immediate        = instr_0.immediate;
-    assign rename_instruction_0.rs1_addr         = rs1_phy_0;
-    assign rename_instruction_0.rs2_addr         = rs2_phy_0;
-    assign rename_instruction_0.rd_addr          = rd_phy_new_0;
-    assign rename_instruction_0.predict_taken   = predict_taken_0;
-    assign rename_instruction_0.predict_target  = predict_target_0;
+    assign rename_instruction_0.addr           = instr_0.addr;
+    assign rename_instruction_0.opcode         = instr_0.opcode;
+    assign rename_instruction_0.funct3         = instr_0.funct3;
+    assign rename_instruction_0.funct7         = instr_0.funct7;
+    assign rename_instruction_0.immediate      = instr_0.immediate;
+    assign rename_instruction_0.rs1_addr       = rat_0_bus.rs1_phy;
+    assign rename_instruction_0.rs2_addr       = rat_0_bus.rs2_phy;
+    assign rename_instruction_0.rd_addr        = freelist_0_bus.rd_phy_new;
+    assign rename_instruction_0.predict_taken  = predict_taken_0;
+    assign rename_instruction_0.predict_target = predict_target_0;
+    assign rename_instruction_0.rob_id         = rob_id_0;
+    assign rename_instruction_0.valid          = (flush || stall_dispatch) ? 1'b0 : instruction_valid[0];
             // instruction 1
-    assign rename_instruction_1.instruction_addr = instr_1.instruction_addr;
-    assign rename_instruction_1.opcode           = instr_1.opcode;
-    assign rename_instruction_1.funct3           = instr_1.funct3;
-    assign rename_instruction_1.funct7           = instr_1.funct7;
-    assign rename_instruction_1.immediate        = instr_1.immediate;
-    assign rename_instruction_1.rs1_addr         = rs1_phy_1;
-    assign rename_instruction_1.rs2_addr         = rs2_phy_1;
-    assign rename_instruction_1.rd_addr          = rd_phy_new_1;
-    assign rename_instruction_1.predict_taken   = predict_taken_1;
-    assign rename_instruction_1.predict_target  = predict_target_1;
-
+    assign rename_instruction_1.addr           = instr_1.addr;
+    assign rename_instruction_1.opcode         = instr_1.opcode;
+    assign rename_instruction_1.funct3         = instr_1.funct3;
+    assign rename_instruction_1.funct7         = instr_1.funct7;
+    assign rename_instruction_1.immediate      = instr_1.immediate;
+    assign rename_instruction_1.rs1_addr       = rat_1_bus.rs1_phy;
+    assign rename_instruction_1.rs2_addr       = rat_1_bus.rs2_phy;
+    assign rename_instruction_1.rd_addr        = freelist_1_bus.rd_phy_new;
+    assign rename_instruction_1.predict_taken  = predict_taken_1;
+    assign rename_instruction_1.predict_target = predict_target_1;
+    assign rename_instruction_1.rob_id         = rob_id_1;
+    assign rename_instruction_1.valid          = (flush || stall_dispatch) ? 1'b0 : instruction_valid[1];
 
 
     Dispatch #(NUM_RS_ENTRIES, ROB_WIDTH, PHY_REGS, PHY_WIDTH) Dispatch_Unit(
@@ -231,11 +189,8 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
         .flush(flush),
         .stall_dispatch(stall_dispatch),
         .PRF_valid(PRF_valid),
-        .rename_valid(rename_valid),
         .rename_instruction_0(rename_instruction_0),
-        .rob_id_0(rename_rob_id_0),
         .rename_instruction_1(rename_instruction_1),
-        .rob_id_1(rename_rob_id_1),
         // dispatch --> issue
         .issue_instruction_alu(issue_instruction_alu),
         .issue_instruction_ls(issue_instruction_ls),

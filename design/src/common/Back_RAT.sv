@@ -4,9 +4,7 @@ module Back_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     input logic clk,
     input logic rst,
     input logic flush,
-    input logic retire_valid,
-    input logic [4:0]rd_arch_commit,
-    input logic [PHY_WIDTH-1:0]rd_phy_new_commit,
+    retire_if.retire_pr_sink retire_pr_bus,
     output [PHY_WIDTH*ARCH_REGS-1:0]back_rat
 );
     logic [PHY_WIDTH-1:0] BACK_RAT [0:ARCH_REGS-1];
@@ -27,8 +25,8 @@ module Back_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
                 BACK_RAT[j] <= j;
         end
         else if (!flush) begin
-            if (retire_valid) begin
-                BACK_RAT[rd_arch_commit] <= rd_phy_new_commit;
+            if (retire_pr_bus.retire_pr_valid) begin
+                BACK_RAT[retire_pr_bus.rd_arch] <= retire_pr_bus.rd_phy_new;
             end
         end
     end

@@ -10,14 +10,9 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, P
     input [PHY_REGS-1:0]PRF_valid,
     // ========== Instruction Decode ==============
     // first instruction
-    input logic [1:0]rename_valid,
     input instruction_t rename_instruction_0,
-    input [ROB_WIDTH-1:0] rob_id_0,
     // second instruction
     input instruction_t rename_instruction_1,
-    input [ROB_WIDTH-1:0] rob_id_1,
-    input logic predict_taken,
-    input logic [ADDR_WIDTH-1:0] predict_target,
     //======== Dispatch to ReservationStation====
     output RS_ENTRY_t issue_instruction_alu,
     output RS_ENTRY_t issue_instruction_ls,
@@ -53,9 +48,9 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, P
             dispatch_branch_valid_0 = 1'b0;
         end
         else begin
-            dispatch_alu_valid_0    = (rename_valid[0] && (isALU_0)) ? 1 : 0;
-            dispatch_ls_valid_0     = (rename_valid[0] && (isLoad_0 || isStore_0)) ? 1 : 0;
-            dispatch_branch_valid_0 = (rename_valid[0] && (isBranch_0)) ? 1 : 0;
+            dispatch_alu_valid_0    = (rename_instruction_0.valid && (isALU_0)) ? 1 : 0;
+            dispatch_ls_valid_0     = (rename_instruction_0.valid && (isLoad_0 || isStore_0)) ? 1 : 0;
+            dispatch_branch_valid_0 = (rename_instruction_0.valid && (isBranch_0)) ? 1 : 0;
         end
     end
 
@@ -66,9 +61,9 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, P
             dispatch_branch_valid_1 = 1'b0;
         end
         else begin
-            dispatch_alu_valid_1    = (rename_valid[1] && (isALU_1)) ? 1 : 0;
-            dispatch_ls_valid_1     = (rename_valid[1] && (isLoad_1 || isStore_1)) ? 1 : 0;
-            dispatch_branch_valid_1 = (rename_valid[1] && (isBranch_1)) ? 1 : 0;
+            dispatch_alu_valid_1    = (rename_instruction_1.valid && (isALU_1)) ? 1 : 0;
+            dispatch_ls_valid_1     = (rename_instruction_1.valid && (isLoad_1 || isStore_1)) ? 1 : 0;
+            dispatch_branch_valid_1 = (rename_instruction_1.valid && (isBranch_1)) ? 1 : 0;
         end
     end
 
@@ -79,10 +74,8 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, P
         .stall_dispatch(stall_dispatch),
         .PRF_valid(PRF_valid),
         .dispatch_instruction_0(rename_instruction_0),
-        .rob_id_0(rob_id_0),
         .dispatch_valid_0(dispatch_alu_valid_0),
         .dispatch_instruction_1(rename_instruction_1),
-        .rob_id_1(rob_id_1),
         .dispatch_valid_1(dispatch_alu_valid_1),
         .issue_instruction(issue_instruction_alu),
         .issue_valid(issue_alu_valid),
@@ -96,10 +89,8 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, P
         .stall_dispatch(stall_dispatch),
         .PRF_valid(PRF_valid),
         .dispatch_instruction_0(rename_instruction_0),
-        .rob_id_0(rob_id_0),
         .dispatch_valid_0(dispatch_ls_valid_0),
         .dispatch_instruction_1(rename_instruction_1),
-        .rob_id_1(rob_id_1),
         .dispatch_valid_1(dispatch_ls_valid_1),
         .issue_instruction(issue_instruction_ls),
         .issue_valid(issue_ls_valid),
@@ -113,10 +104,8 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, P
         .stall_dispatch(stall_dispatch),
         .PRF_valid(PRF_valid),
         .dispatch_instruction_0(rename_instruction_0),
-        .rob_id_0(rob_id_0),
         .dispatch_valid_0(dispatch_branch_valid_0),
         .dispatch_instruction_1(rename_instruction_1),
-        .rob_id_1(rob_id_1),
         .dispatch_valid_1(dispatch_branch_valid_1),
         .issue_instruction(issue_instruction_branch),
         .issue_valid(issue_branch_valid),

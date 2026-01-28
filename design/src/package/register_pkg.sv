@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 package register_pkg;
 
     typedef enum logic [4:0]{

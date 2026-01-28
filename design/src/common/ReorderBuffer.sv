@@ -8,27 +8,14 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     input  logic                  rst,
     input  logic                  flush,
     // rename/dispatch
-    input  [1:0]                 dispatch_valid,
-    input  ROB_ENTRY_t           dispatch_rob_0,         // entry to be added
+    input  ROB_ENTRY_t           rob_entry_0,         // entry to be added
     output logic [ROB_WIDTH-1:0] rob_id_0,
     // second instruction
-    input  ROB_ENTRY_t dispatch_rob_1,         // entry to be added
+    input  ROB_ENTRY_t           rob_entry_1,         // entry to be added
     output logic [ROB_WIDTH-1:0] rob_id_1,
 
     // commit 
-    input  logic                  commit_alu_valid,
-    input  logic [ROB_WIDTH-1:0]  commit_alu_rob_id,
-    input  logic                  commit_load_valid,
-    input  logic [ROB_WIDTH-1:0]  commit_load_rob_id,
-    input  logic                  commit_store_valid,
-    input  logic [ROB_WIDTH-1:0]  commit_store_rob_id,
-    input  logic [$clog2(FIFO_DEPTH)-1:0] commit_store_id,
-    input  logic                  commit_branch_valid,
-    input  logic [ROB_WIDTH-1:0]  commit_branch_rob_id,
-    input  logic                  commit_mispredict,
-    input  logic [ADDR_WIDTH-1:0] commit_actual_target, // actual target address for branch instructions
-    input  logic                  commit_actual_taken,
-    input  logic [ADDR_WIDTH-1:0] commit_update_pc,
+    writeback_if.sink wb_to_rob_bus,
     // ROB status
     output logic [NUM_ROB_ENTRY-1:0]       rob_finish,
     output ROB_ENTRY_t rob[NUM_ROB_ENTRY-1:0],
@@ -45,8 +32,8 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     logic [ROB_WIDTH-1:0] head;
     logic [ROB_WIDTH-1:0] tail;
     
-    assign rob_id_0 = (dispatch_valid[0]) ? tail : {ROB_WIDTH{1'b0}};
-    assign rob_id_1 = (dispatch_valid[1]) ? ((dispatch_valid[0]) ? tail + 4'd1 : tail) : {ROB_WIDTH{1'b0}};
+    assign rob_id_0 = (rob_entry_0.valid) ? tail : {ROB_WIDTH{1'b0}};
+    assign rob_id_1 = (rob_entry_1.valid) ? ((rob_entry_0.valid) ? tail + 4'd1 : tail) : {ROB_WIDTH{1'b0}};
     integer i;
 
     assign rob_finish = ROB_FINISH;
@@ -57,17 +44,18 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
             for(i = 0; i < NUM_ROB_ENTRY; i = i + 1)begin
-                ROB[i].rd_arch        = 'h0;
-                ROB[i].rd_phy_old     = 'h0;
-                ROB[i].rd_phy_new     = 'h0;
-                ROB[i].opcode         = 'h0;
-                ROB[i].actual_target  = 'h0;
-                ROB[i].actual_taken   = 1'b0;
-                ROB[i].update_pc      = 'h0;
-                ROB[i].mispredict     = 1'b0;
-                ROB[i].store_id       = 'h0;
+                ROB[i].rd_arch        <= 'h0;
+                ROB[i].rd_phy_old     <= 'h0;
+                ROB[i].rd_phy_new     <= 'h0;
+                ROB[i].opcode         <= 'h0;
+                ROB[i].actual_target  <= 'h0;
+                ROB[i].actual_taken   <= 1'b0;
+                ROB[i].update_pc      <= 'h0;
+                ROB[i].mispredict     <= 1'b0;
+                ROB[i].store_id       <= 'h0;
+                ROB[i].valid          <= 1'b0;
                 // debugging info
-                ROB[i].addr           = 'h0;
+                ROB[i].addr           <= 'h0;
             end
             count <= 0;
             tail  <= 0;
@@ -76,19 +64,19 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
             tail  <= 0;
             count <= 0;
         end
-        else if(dispatch_valid == 2'b11)begin
-            ROB[tail] <= dispatch_rob_0;
-            ROB[tail+1] <= dispatch_rob_1;
+        else if(rob_entry_0.valid && rob_entry_1.valid)begin
+            ROB[tail]   <= rob_entry_0;
+            ROB[tail+1] <= rob_entry_1;
             tail      <= tail + 2;
             count     <= count + 2;
         end
-        else if(dispatch_valid == 2'b01)begin
-            ROB[tail] <= dispatch_rob_0;
+        else if(rob_entry_0.valid && !rob_entry_1.valid)begin
+            ROB[tail] <= rob_entry_0;
             tail      <= tail + 1;
             count     <= count + 1;
         end
-        else if(dispatch_valid == 2'b10)begin
-            ROB[tail] <= dispatch_rob_1;
+        else if(!rob_entry_0.valid && rob_entry_1.valid)begin
+            ROB[tail] <= rob_entry_1;
             tail      <= tail + 1;
             count     <= count + 1;
         end
@@ -127,22 +115,22 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
             ROB_FINISH <= 'b0;
         end
         else begin
-            if(commit_alu_valid) begin
-                ROB_FINISH[commit_alu_rob_id] <= 1'b1;
+            if(wb_to_rob_bus.alu_valid) begin
+                ROB_FINISH[wb_to_rob_bus.alu_rob_id] <= 1'b1;
             end
-            if(commit_load_valid) begin
-                ROB_FINISH[commit_load_rob_id] <= 1'b1;
+            if(wb_to_rob_bus.load_valid) begin
+                ROB_FINISH[wb_to_rob_bus.load_rob_id] <= 1'b1;
             end
-            if(commit_store_valid) begin
-                ROB_FINISH[commit_store_rob_id] <= 1'b1;
-                ROB[commit_store_rob_id].store_id <= commit_store_id;
+            if(wb_to_rob_bus.store_valid) begin
+                ROB_FINISH[wb_to_rob_bus.store_rob_id] <= 1'b1;
+                ROB[wb_to_rob_bus.store_rob_id].store_id <= wb_to_rob_bus.store_id;
             end
-            if(commit_branch_valid) begin
-                ROB_FINISH[commit_branch_rob_id]        <= 1'b1;
-                ROB[commit_branch_rob_id].mispredict    <= commit_mispredict;
-                ROB[commit_branch_rob_id].actual_target <= commit_actual_target; // to be used for updating PC on mispredict
-                ROB[commit_branch_rob_id].actual_taken  <= commit_actual_taken;
-                ROB[commit_branch_rob_id].update_pc     <= commit_update_pc;
+            if(wb_to_rob_bus.branch_valid) begin
+                ROB_FINISH[wb_to_rob_bus.branch_rob_id]        <= 1'b1;
+                ROB[wb_to_rob_bus.branch_rob_id].mispredict    <= wb_to_rob_bus.mispredict;
+                ROB[wb_to_rob_bus.branch_rob_id].actual_target <= wb_to_rob_bus.actual_target; // to be used for updating PC on mispredict
+                ROB[wb_to_rob_bus.branch_rob_id].actual_taken  <= wb_to_rob_bus.actual_taken;
+                ROB[wb_to_rob_bus.branch_rob_id].update_pc     <= wb_to_rob_bus.update_pc;
             end
             
         end

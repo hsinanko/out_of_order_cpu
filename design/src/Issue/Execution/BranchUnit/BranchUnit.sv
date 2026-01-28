@@ -11,7 +11,6 @@ module BranchUnit #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32)(
     input logic [2:0] funct3,
     input logic predict_taken,
     input logic [ADDR_WIDTH-1:0] predict_target,
-    input logic [DATA_WIDTH-1:0] rd_data_branch,
     output logic mispredict,
     output logic actual_taken,
     output logic [ADDR_WIDTH-1:0] actual_target,

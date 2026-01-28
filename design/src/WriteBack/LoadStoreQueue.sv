@@ -18,10 +18,10 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     input logic [ROB_WIDTH-1:0]  load_rob_id,
     input logic [PHY_WIDTH-1:0]  load_rd_phy,
     input logic                  load_valid,
-    output logic [DATA_WIDTH-1:0] commit_load_valid,
-    output logic [ROB_WIDTH-1:0]  commit_load_rob_id,
-    output logic [DATA_WIDTH-1:0] commit_load_rdata,
-    output logic [PHY_WIDTH-1:0]  commit_rd_load,
+    output logic [DATA_WIDTH-1:0] wb_load_valid,
+    output logic [ROB_WIDTH-1:0]  wb_load_rob_id,
+    output logic [DATA_WIDTH-1:0] wb_load_rdata,
+    output logic [PHY_WIDTH-1:0]  wb_rd_load,
     // ========= Memory Interface =================
     // load
     output logic [ADDR_WIDTH-1:0] mem_raddr,
@@ -29,8 +29,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     input  logic [DATA_WIDTH-1:0] mem_rdata,
     input  logic                  mem_rdata_valid,
     // ========= retire interface ==============
-    input logic                   retire_store_valid,
-    input logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id,
+    retire_if.retire_store_sink   retire_store_bus,
     output logic                  mem_write_en,
     output logic [ADDR_WIDTH-1:0] mem_waddr,
     output logic [DATA_WIDTH-1:0] mem_wdata
@@ -56,7 +55,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     assign store_empty = (store_count == 0);   
     
     assign isStore = store_valid && !store_full;
-    assign isRetire = retire_store_valid && !store_empty;
+    assign isRetire = retire_store_bus.retire_store_valid && !store_empty;
 
     always_ff@(posedge clk or posedge rst) begin
         if (rst) begin
@@ -84,8 +83,8 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
         .is_empty(store_empty),
         .is_full(store_full),
         .free_entry(free_store_id),
-        .retire_store_valid(retire_store_valid),
-        .retire_entry(retire_store_id) 
+        .retire_store_valid(retire_store_bus.retire_store_valid),
+        .retire_entry(retire_store_bus.retire_store_id) 
     );
 
     assign store_id = (isStore) ? free_store_id : 'hx;
@@ -116,11 +115,11 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
                 StoreQueue[free_store_id].valid <= 1'b1;
             end
 
-            if(retire_store_valid) begin
-                StoreQueue[retire_store_id].valid <= 1'b0;
+            if(retire_store_bus.retire_store_valid) begin
+                StoreQueue[retire_store_bus.retire_store_id].valid <= 1'b0;
                 mem_write_en <= 1'b1;
-                mem_waddr    <= StoreQueue[retire_store_id].addr;
-                mem_wdata    <= StoreQueue[retire_store_id].data;
+                mem_waddr    <= StoreQueue[retire_store_bus.retire_store_id].addr;
+                mem_wdata    <= StoreQueue[retire_store_bus.retire_store_id].data;
             end
             else begin
                 mem_write_en <= 1'b0;
@@ -259,36 +258,36 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
             IDLE: begin
                 mem_rd_en   = 1'b0;
                 mem_raddr   = 'h0;
-                commit_load_valid = 1'b0;
-                commit_load_rob_id = 'h0;
-                commit_load_rdata  = 'h0;
-                commit_rd_load     = 'h0;
+                wb_load_valid = 1'b0;
+                wb_load_rob_id = 'h0;
+                wb_load_rdata  = 'h0;
+                wb_rd_load     = 'h0;
             end
             CHECK: begin
                 LoadEntry= load_entry(LoadQueue[head_load]);
                 mem_rd_en = 1'b1;
                 mem_raddr = LoadEntry.addr;
-                commit_load_valid  = 1'b0;
-                commit_load_rob_id = 'h0;
-                commit_load_rdata  = 'h0;
-                commit_rd_load     = 'h0;
+                wb_load_valid  = 1'b0;
+                wb_load_rob_id = 'h0;
+                wb_load_rdata  = 'h0;
+                wb_rd_load     = 'h0;
                 
             end
             SEND: begin
                 mem_rd_en = 1'b0;
                 mem_raddr = 'h0;
-                commit_load_valid  = 1'b1;
-                commit_load_rob_id = LoadEntry.rob_id;
-                commit_rd_load     = LoadEntry.rd_phy;
-                commit_load_rdata  = LoadEntry.data;
+                wb_load_valid  = 1'b1;
+                wb_load_rob_id = LoadEntry.rob_id;
+                wb_rd_load     = LoadEntry.rd_phy;
+                wb_load_rdata  = LoadEntry.data;
             end
             WAIT: begin
                 mem_rd_en = 1'b0;
                 mem_raddr = 'h0;
-                commit_load_valid  = 1'b0;
-                commit_load_rob_id = 'h0;
-                commit_load_rdata  = 'h0;
-                commit_rd_load     = 'h0;
+                wb_load_valid  = 1'b0;
+                wb_load_rob_id = 'h0;
+                wb_load_rdata  = 'h0;
+                wb_rd_load     = 'h0;
                 if(mem_rdata_valid) begin
                     memory_index = LoadEntry.addr[1:0];
                     case(LoadEntry.funct3)
@@ -316,12 +315,12 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
 
             end
             default: begin
-                mem_rd_en   = 1'b0;
-                mem_raddr   = 'h0;
-                commit_load_valid  = 1'b0;
-                commit_load_rob_id = 'h0;
-                commit_load_rdata  = 'h0;
-                commit_rd_load     = 'h0;
+                mem_rd_en      = 1'b0;
+                mem_raddr      = 'h0;
+                wb_load_valid  = 1'b0;
+                wb_load_rob_id = 'h0;
+                wb_load_rdata  = 'h0;
+                wb_rd_load     = 'h0;
             end
         endcase
     end

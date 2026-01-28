@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 package debug_pkg;
     function string phy_reg_name(logic [5:0] preg);
         phy_reg_name = $sformatf("r%0d", preg);
@@ -128,7 +129,7 @@ package debug_pkg;
         end
         else if(instr.opcode == 'b0110011)begin // R-type
             instruction_brief_name = $sformatf("addr: %h, Instruction:  %s %s, %s, %s",
-                                            instr.instruction_addr,
+                                            instr.addr,
                                             opcode_name(instr.opcode, instr.funct3, instr.funct7),
                                             reg_name(instr.rd_addr, 1),
                                             reg_name(instr.rs1_addr, 1),
@@ -136,7 +137,7 @@ package debug_pkg;
         end
         else if(instr.opcode == 'b0010011)begin // I-type
             instruction_brief_name = $sformatf("addr: %h, Instruction:  %s %s, %s, %0d",
-                                            instr.instruction_addr,
+                                            instr.addr,
                                             opcode_name(instr.opcode, instr.funct3, instr.funct7),
                                             reg_name(instr.rd_addr, 1),
                                             reg_name(instr.rs1_addr, 1),
@@ -144,7 +145,7 @@ package debug_pkg;
         end
         else if(instr.opcode == 'b0000011)begin // Load
             instruction_brief_name = $sformatf("addr: %h, Instruction:  %s %s, %0d(%s)",
-                                            instr.instruction_addr,
+                                            instr.addr,
                                             opcode_name(instr.opcode, instr.funct3, instr.funct7),
                                             reg_name(instr.rd_addr, 1),
                                             $signed(instr.immediate),
@@ -152,7 +153,7 @@ package debug_pkg;
         end
         else if(instr.opcode == 'b0100011)begin // Store
             instruction_brief_name = $sformatf("addr: %h, Instruction:  %s %s, %0d(%s)",
-                                            instr.instruction_addr,
+                                            instr.addr,
                                             opcode_name(instr.opcode, instr.funct3, instr.funct7),
                                             reg_name(instr.rs2_addr, 1),
                                             $signed(instr.immediate),
@@ -160,7 +161,7 @@ package debug_pkg;
         end
         else if(instr.opcode == 'b1100011)begin // Branch
             instruction_brief_name = $sformatf("addr: %h, Instruction:  %s %s, %s, %0d",
-                                            instr.instruction_addr,
+                                            instr.addr,
                                             opcode_name(instr.opcode, instr.funct3, instr.funct7),
                                             reg_name(instr.rs1_addr, 1),
                                             reg_name(instr.rs2_addr, 1),
@@ -168,14 +169,14 @@ package debug_pkg;
         end
         else if(instr.opcode == 'b1101111)begin // JAL
             instruction_brief_name = $sformatf("addr: %h, Instruction:  %s %s, %0d",
-                                            instr.instruction_addr,
+                                            instr.addr,
                                             opcode_name(instr.opcode, instr.funct3, instr.funct7),
                                             reg_name(instr.rd_addr, 1),
                                             $signed(instr.immediate));
         end
         else if(instr.opcode == 'b1100111)begin // JALR
             instruction_brief_name = $sformatf("addr: %h, Instruction:  %s %s, %s, %0d",
-                                            instr.instruction_addr,
+                                            instr.addr,
                                             opcode_name(instr.opcode, instr.funct3, instr.funct7),
                                             reg_name(instr.rd_addr, 1),
                                             reg_name(instr.rs1_addr, 1),
@@ -183,21 +184,21 @@ package debug_pkg;
         end
         else if(instr.opcode == 'b0110111)begin // LUI
             instruction_brief_name = $sformatf("addr: %h, Instruction:  %s %s, %0d",
-                                            instr.instruction_addr,
+                                            instr.addr,
                                             opcode_name(instr.opcode, instr.funct3, instr.funct7),
                                             reg_name(instr.rd_addr, 1),
                                             $signed(instr.immediate));
         end
         else if(instr.opcode == 'b0010111)begin // AUIPC
             instruction_brief_name = $sformatf("addr: %h, Instruction:  %s %s, %0d",
-                                            instr.instruction_addr,
+                                            instr.addr,
                                             opcode_name(instr.opcode, instr.funct3, instr.funct7),
                                             reg_name(instr.rd_addr, 1),
                                             $signed(instr.immediate));
         end
         else begin
             instruction_brief_name = $sformatf("addr: %h, Instruction: UNKNOWN",
-                                            instr.instruction_addr);
+                                            instr.addr);
         end
 
     endfunction

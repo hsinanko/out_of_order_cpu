@@ -1,9 +1,9 @@
-
+`timescale 1ns / 1ps
 package typedef_pkg;
     import parameter_pkg::*;
     
     typedef struct{
-        logic [ADDR_WIDTH-1:0] instruction_addr;        // program counter
+        logic [ADDR_WIDTH-1:0] addr;        // program counter
         logic [6:0] opcode;      // opcode field
         logic [6:0] funct7;      // funct7 field
         logic [2:0] funct3;      // funct3 field
@@ -13,6 +13,8 @@ package typedef_pkg;
         logic [DATA_WIDTH-1:0]immediate;   // immediate value
         logic predict_taken;
         logic [ADDR_WIDTH-1:0] predict_target;
+        logic [ROB_WIDTH-1:0] rob_id;
+        logic valid;
     }instruction_t;
 
     typedef struct{
@@ -25,34 +27,36 @@ package typedef_pkg;
         logic [ADDR_WIDTH-1:0] update_pc;
         logic mispredict;
         logic [$clog2(FIFO_DEPTH)-1:0] store_id;
+        logic valid;
         // debugging info
         logic [ADDR_WIDTH-1:0] addr;
+
     } ROB_ENTRY_t;
 
     typedef struct{
         logic [ADDR_WIDTH-1:0] addr;
-        logic [ROB_WIDTH-1:0] rob_id;
+        logic [6:0] opcode;
         logic [6:0] funct7;
         logic [2:0] funct3; 
         logic [PHY_WIDTH-1:0] rs1_phy;
         logic [PHY_WIDTH-1:0] rs2_phy;
         logic [PHY_WIDTH-1:0] rd_phy;
         logic [DATA_WIDTH-1:0] immediate;
-        logic [6:0] opcode;
         logic predict_taken;
         logic [ADDR_WIDTH-1:0] predict_target;
+        logic [ROB_WIDTH-1:0] rob_id;
         logic valid;
         logic [31:0] age;
     } RS_ENTRY_t;
 
-    typedef struct packed {
+    typedef struct {
         logic [31:0] age;
         logic [ADDR_WIDTH-1:0] addr;
         logic [DATA_WIDTH-1:0] data;
         logic valid;
     } STORE_entry_t;
 
-    typedef struct packed {
+    typedef struct {
         logic [31:0] age;
         logic [2:0] funct3;
         logic [ADDR_WIDTH-1:0] addr;

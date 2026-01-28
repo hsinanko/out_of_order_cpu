@@ -7,7 +7,7 @@
 main:
 ## write assembly code here.
 ## call fibonacci function and get return value.
-	li a0, 12
+	li a0, 8
     addi sp, sp, -4		
     sw a0, 0(sp)		# store n
     jal fibonacci		# fibonacci(n)

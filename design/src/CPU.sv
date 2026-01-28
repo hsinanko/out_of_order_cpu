@@ -5,7 +5,7 @@ import typedef_pkg::*;
 import instruction_pkg::*;
 import info_pkg::*;
 
-module O3O_CPU #(parameter ADDR_WIDTH = 32, 
+module CPU #(parameter ADDR_WIDTH = 32, 
                            DATA_WIDTH = 32,
                            ARCH_REGS = 32,
                            PHY_REGS = 64, 
@@ -30,27 +30,20 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
     output logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out,
     output logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat_out
 );
-    // ============= Debugging ==================
-    assign back_rat_out = back_rat;
-    logic [ADDR_WIDTH-1:0]retire_addr;
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst)
-            retire_addr_reg <= 'h0;
-        else
-            retire_addr_reg <= retire_addr;
-    end
-    assign retire_valid_reg = (flush) ? 1'b0 : (retire_pr_valid_reg || retire_store_valid_reg || retire_branch_valid_reg);
+
     // ============= Flush Logic ===================
     logic flush;
     logic isFlush;
     logic [ADDR_WIDTH-1:0] redirect_pc;
+
+    assign isFlush = retire_bus.isFlush;
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
             flush <= 1'b0;
         end
         else if(isFlush)begin
             flush <= 1'b1;
-            redirect_pc <= update_btb_target_reg;
+            redirect_pc <= retire_bus.targetPC;
         end
         else begin
             flush <= 1'b0;
@@ -58,10 +51,11 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         end
     end
 
+    
     always_ff @(posedge clk or posedge rst)begin
         if(rst)
             done <= 1'b0;
-        else if(retire_done_valid_reg && !flush)
+        else if(done_valid && !flush)
             done <= 1'b1;
         else
             done <= done;
@@ -79,38 +73,23 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
     logic predict_taken_1;
     logic [ADDR_WIDTH-1:0] predict_target_0;
     logic [ADDR_WIDTH-1:0] predict_target_1;
-    logic update_valid;
-    logic [ADDR_WIDTH-1:0] update_pc;
-    logic update_taken;
-    logic [ADDR_WIDTH-1:0] update_target;
 
     logic [ADDR_WIDTH-1:0]instruction_addr_0_reg, instruction_addr_1_reg;
     logic [DATA_WIDTH-1:0]instruction_0_reg, instruction_1_reg;
     logic [1:0] instruction_valid_reg;
+
     logic predict_taken_0_reg;
     logic [ADDR_WIDTH-1:0] predict_target_0_reg;
-
     logic predict_taken_1_reg;
     logic [ADDR_WIDTH-1:0] predict_target_1_reg;
 
     // ============= Decode / Rename Stage ==============
-    logic [PHY_WIDTH-1:0] rd_phy_old_0, rd_phy_old_1;
-    logic [4:0] rs1_arch_0, rs2_arch_0, rd_arch_0;
-    logic [PHY_WIDTH-1:0] rs1_phy_0, rs2_phy_0;
-    logic [PHY_WIDTH-1:0] rd_phy_0;
+    rename_if #( ARCH_REGS, PHY_WIDTH) rename_0();
+    rename_if #( ARCH_REGS, PHY_WIDTH) rename_1();
 
-    logic [PHY_WIDTH-1:0] rd_phy_new_0;
-    logic [4:0] rs1_arch_1, rs2_arch_1, rd_arch_1;
-    logic [PHY_WIDTH-1:0] rd_phy_new_1;
-    logic [PHY_WIDTH-1:0] rs1_phy_1, rs2_phy_1;
-    logic [PHY_WIDTH-1:0] rd_phy_1;
-
-    logic [1:0] instr_valid;
-    logic [1:0] free_list_valid;
     // Dispatch signals produced by DecodeRename
-    logic [1:0] dispatch_valid;
-    ROB_ENTRY_t dispatch_rob_0;
-    ROB_ENTRY_t dispatch_rob_1;
+    ROB_ENTRY_t rob_entry_0;
+    ROB_ENTRY_t rob_entry_1;
     logic [ROB_WIDTH-1:0] rob_id_0, rob_id_1;
 
     logic [1:0] busy_valid;
@@ -123,122 +102,20 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
     logic issue_alu_valid_reg, issue_ls_valid_reg, issue_branch_valid_reg;
 
     // ============ Issue / Execution Stage ==================
-    logic [ROB_WIDTH-1:0]  alu_rob_id;
-    logic [DATA_WIDTH-1:0] alu_output;
-    logic [PHY_WIDTH-1:0]  rd_phy_alu;
-    logic                  busy_alu;
-    logic [ADDR_WIDTH-1:0] store_waddr;
-    logic [DATA_WIDTH-1:0] store_wdata;
-    logic [ROB_WIDTH-1:0]  store_rob_id;
-    logic                  store_valid;
-    logic [2:0]            load_funct3;
-    logic [ADDR_WIDTH-1:0] load_raddr;
-    logic [ROB_WIDTH-1:0]  load_rob_id;
-    logic [PHY_WIDTH-1:0]  load_rd_phy;
-    logic                  load_valid;
-    logic                  busy_lsu;
-
-    logic [ROB_WIDTH-1:0]  branch_rob_id;
-    logic                  actual_taken;
-    logic [ADDR_WIDTH-1:0] jumpPC;
-    logic [ADDR_WIDTH-1:0] nextPC;
-    logic [PHY_WIDTH-1:0]  rd_phy_branch;
-    logic                  isJump;
-    logic                  mispredict;
-    logic                  busy_branch;
-
-
-    logic [ROB_WIDTH-1:0]  alu_rob_id_reg;
-    logic [DATA_WIDTH-1:0] alu_output_reg;
-    logic [PHY_WIDTH-1:0]  rd_phy_alu_reg;
-    logic                  alu_valid_reg;
-    // Load/Store outputs
-    logic [ADDR_WIDTH-1:0] store_waddr_reg;
-    logic [DATA_WIDTH-1:0] store_wdata_reg;
-    logic [ROB_WIDTH-1:0]  store_rob_id_reg;
-    logic                  store_valid_reg;
-    logic [2:0]            load_funct3_reg;
-    logic [ADDR_WIDTH-1:0] load_raddr_reg;
-    logic [ROB_WIDTH-1:0]  load_rob_id_reg;
-    logic [PHY_WIDTH-1:0]  load_rd_phy_reg;
-    logic                  load_valid_reg;
-    // Branch outputs
-    logic [ROB_WIDTH-1:0]  branch_rob_id_reg;
-    logic                  actual_taken_reg;
-    logic [ADDR_WIDTH-1:0] jumpPC_reg;
-    logic [ADDR_WIDTH-1:0] update_pc_reg;
-    logic [ADDR_WIDTH-1:0] nextPC_reg;
-    logic [PHY_WIDTH-1:0]  rd_phy_branch_reg;
-    logic                  isJump_reg;
-    logic                  mispredict_reg;
-    logic                  branch_valid_reg;
-
-
+    execution_if #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH)exe_bus();
+    execution_if #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH)exe_bus_reg();
+        
     // ============= Write Back Stage ==================
-    logic                  commit_alu_valid;
-    logic [ROB_WIDTH-1:0]  commit_alu_rob_id;
-    logic [PHY_WIDTH-1:0]  commit_rd_alu;
-    logic [DATA_WIDTH-1:0] commit_alu_result;
-    // load
-    logic                  commit_load_valid;
-    logic [ROB_WIDTH-1:0]  commit_load_rob_id;
-    logic [PHY_WIDTH-1:0]  commit_rd_load;
-    logic [DATA_WIDTH-1:0] commit_load_rdata;
-    // store
-    logic                  commit_store_valid;
-    logic [ROB_WIDTH-1:0]  commit_store_rob_id;
-    logic [$clog2(FIFO_DEPTH)-1:0] commit_store_id;
-    // branch
-    logic                  commit_branch_valid;
-    logic                  commit_jump_valid;
-    logic [ROB_WIDTH-1:0]  commit_branch_rob_id;
-    logic [PHY_WIDTH-1:0]  commit_rd_branch;
-    logic [ADDR_WIDTH-1:0] commit_nextPC;
-    logic                  commit_mispredict;
-    logic [ADDR_WIDTH-1:0] commit_actual_target;
-    logic                  commit_actual_taken;
-    logic [ADDR_WIDTH-1:0] commit_update_pc;
-    // Write Back registers
-    logic                  commit_alu_valid_reg;
-    logic [ROB_WIDTH-1:0]  commit_alu_rob_id_reg;
-    logic [PHY_WIDTH-1:0]  commit_rd_alu_reg;
-    logic [DATA_WIDTH-1:0] commit_alu_result_reg;
-    logic [1:0]            commit_load_valid_reg;
-    logic [ROB_WIDTH-1:0]  commit_load_rob_id_reg;
-    logic [PHY_WIDTH-1:0]  commit_rd_load_reg;
-    logic [DATA_WIDTH-1:0] commit_load_rdata_reg;
-    logic                  commit_store_valid_reg;
-    logic [ROB_WIDTH-1:0]  commit_store_rob_id_reg;
-    logic [$clog2(FIFO_DEPTH)-1:0] commit_store_id_reg;
-    logic                  commit_branch_valid_reg;
-    logic                  commit_jump_valid_reg;
-    logic [ROB_WIDTH-1:0]  commit_branch_rob_id_reg;
-    logic [PHY_WIDTH-1:0]  commit_rd_branch_reg;
-    logic [ADDR_WIDTH-1:0] commit_nextPC_reg;
-    logic                  commit_mispredict_reg;
-    logic [ADDR_WIDTH-1:0] commit_actual_target_reg;
-    logic                  commit_actual_taken_reg;
-    logic [ADDR_WIDTH-1:0] commit_update_pc_reg;
+    writeback_if #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH, FIFO_DEPTH)wb_bus();
+    writeback_if #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH, FIFO_DEPTH)wb_bus_reg();
+
     // ============= Physical Register File ==================
     logic [PHY_REGS-1:0]PRF_busy;
     logic [PHY_REGS-1:0]PRF_valid;
 
-
-    logic alu_valid;
-    logic ls_valid;
-    logic branch_valid;
-    logic [PHY_WIDTH-1:0] rs1_phy_alu;
-    logic [PHY_WIDTH-1:0] rs2_phy_alu;
-    logic [DATA_WIDTH-1:0] rs1_data_alu;
-    logic [DATA_WIDTH-1:0] rs2_data_alu;
-    logic [PHY_WIDTH-1:0] rs1_phy_ls;
-    logic [PHY_WIDTH-1:0] rs2_phy_ls;
-    logic [DATA_WIDTH-1:0] rs1_data_ls;
-    logic [DATA_WIDTH-1:0] rs2_data_ls;
-    logic [PHY_WIDTH-1:0] rs1_phy_branch;
-    logic [PHY_WIDTH-1:0] rs2_phy_branch;
-    logic [DATA_WIDTH-1:0] rs1_data_branch;
-    logic [DATA_WIDTH-1:0] rs2_data_branch;
+    physical_if #(DATA_WIDTH, PHY_WIDTH) alu_prf_bus();
+    physical_if #(DATA_WIDTH, PHY_WIDTH) lsu_prf_bus();
+    physical_if #(DATA_WIDTH, PHY_WIDTH) branch_prf_bus();
 
     // ============ Back RAT ==================
     logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat;
@@ -260,35 +137,14 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
     ROB_ENTRY_t ROB[NUM_ROB_ENTRY-1:0];
     logic [ROB_WIDTH-1:0] rob_head;
     // ============= Retire Stage ==================
-
-    logic [4:0] rd_arch_commit;
-    logic [PHY_REGS-1:0] rd_phy_old_commit;
-    logic [PHY_REGS-1:0] rd_phy_new_commit;
-    logic [ADDR_WIDTH-1:0] update_btb_pc;
-    logic update_btb_taken;
-    logic [ADDR_WIDTH-1:0] update_btb_target;
-    logic retire_pr_valid;
-    logic retire_store_valid;
-    logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id;
-    logic retire_branch_valid;
-    logic retire_done_valid;
-    // Retire logic
-    logic [4:0] rd_arch_commit_reg;
-    logic [PHY_WIDTH-1:0] rd_phy_old_commit_reg;
-    logic [PHY_WIDTH-1:0] rd_phy_new_commit_reg;
-    logic [ADDR_WIDTH-1:0] update_btb_pc_reg;
-    logic update_btb_taken_reg;
-    logic [ADDR_WIDTH-1:0] update_btb_target_reg;
-    logic retire_pr_valid_reg;
-    logic retire_store_valid_reg;
-    logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id_reg;
-    logic retire_branch_valid_reg;
-    logic retire_done_valid_reg;
+    logic done_valid;
+    retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus();
+    retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus_reg();
+    
+    assign done_valid = retire_bus_reg.retire_done_valid;
 
     //============ Free List ==================
     logic free_list_full, free_list_empty;
-
-
     //============== Unified Instruction/Data Memory ==================
     
     Memory #(INSTR_ADDRESS, DATA_ADDRESS, INSTR_MEM_SIZE, DATA_MEM_SIZE, ADDR_WIDTH, DATA_WIDTH) UnifiedMemory(
@@ -311,7 +167,6 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .rdata_valid(mem_rdata_valid)
     );
 
-    assign update_valid = retire_branch_valid;
     BTB #(ADDR_WIDTH, BTB_ENTRIES, BTB_WIDTH) BTB_unit(
         .clk(clk),
         .rst(rst),
@@ -321,10 +176,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .predict_target_0(predict_target_0),
         .predict_taken_1(predict_taken_1),
         .predict_target_1(predict_target_1),
-        .update_valid(update_valid),
-        .update_btb_pc(update_btb_pc),
-        .update_btb_taken(update_btb_taken),
-        .update_btb_target(update_btb_target)
+        .retire_branch_bus(retire_bus_reg.retire_branch_sink)
     );
 
     always_ff @(posedge clk or posedge rst)begin
@@ -399,28 +251,15 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .predict_taken_1(predict_taken_1_reg),
         .predict_target_1(predict_target_1_reg),
         //======== Front RAT =============================
-        .instr_valid(instr_valid),
-        .rs1_arch_0(rs1_arch_0),
-        .rs2_arch_0(rs2_arch_0),
-        .rd_arch_0(rd_arch_0),
-        .rs1_phy_0(rs1_phy_0),
-        .rs2_phy_0(rs2_phy_0),
-        .rd_phy_0(rd_phy_0),
-        .rs1_arch_1(rs1_arch_1),
-        .rs2_arch_1(rs2_arch_1),
-        .rd_arch_1(rd_arch_1),
-        .rs1_phy_1(rs1_phy_1),
-        .rs2_phy_1(rs2_phy_1),
-        .rd_phy_1(rd_phy_1),
+        .rat_0_bus(rename_0.rat_source),
+        .rat_1_bus(rename_1.rat_source),
         //======== Free List =================
-        .free_list_valid(free_list_valid),
-        .rd_phy_new_0(rd_phy_new_0),
-        .rd_phy_new_1(rd_phy_new_1),
+        .freelist_0_bus(rename_0.freelist_source),
+        .freelist_1_bus(rename_1.freelist_source),
         //======== Reorder Buffer =================
-        .dispatch_valid(dispatch_valid),
-        .dispatch_rob_0(dispatch_rob_0),
+        .rob_entry_0(rob_entry_0),
         .rob_id_0(rob_id_0),
-        .dispatch_rob_1(dispatch_rob_1),
+        .rob_entry_1(rob_entry_1),
         .rob_id_1(rob_id_1),
         // ======= Physical Register File =================
         .busy_valid(busy_valid),
@@ -473,48 +312,11 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .issue_ls_valid(issue_ls_valid_reg),
         .issue_branch_valid(issue_branch_valid_reg),
         // to execution
-        .rs1_phy_alu(rs1_phy_alu),               
-        .rs2_phy_alu(rs2_phy_alu), 
-        .rs1_data_alu(rs1_data_alu),
-        .rs2_data_alu(rs2_data_alu),
-        .alu_valid(alu_valid),
-        .rs1_phy_ls(rs1_phy_ls),               
-        .rs2_phy_ls(rs2_phy_ls),
-        .rs1_data_ls(rs1_data_ls),
-        .rs2_data_ls(rs2_data_ls),
-        .ls_valid(ls_valid),
-        .rs1_phy_branch(rs1_phy_branch),               
-        .rs2_phy_branch(rs2_phy_branch), 
-        .rs1_data_branch(rs1_data_branch),
-        .rs2_data_branch(rs2_data_branch),
-        .branch_valid(branch_valid),
+        .alu_prf_bus(alu_prf_bus.source),
+        .lsu_prf_bus(lsu_prf_bus.source),
+        .branch_prf_bus(branch_prf_bus.source),
         // output to commit stage
-        .alu_rob_id(alu_rob_id),
-        .alu_output(alu_output),
-        .rd_phy_alu(rd_phy_alu),
-        .busy_alu(busy_alu),
-        // Store outputs
-        .store_waddr(store_waddr),
-        .store_wdata(store_wdata),
-        .store_rob_id(store_rob_id),
-        .store_valid(store_valid),
-        // Load outputs
-        .load_funct3(load_funct3),
-        .load_valid(load_valid),
-        .load_raddr(load_raddr),
-        .load_rob_id(load_rob_id),
-        .load_rd_phy(load_rd_phy),
-        .busy_lsu(busy_lsu),
-        // Branch outputs
-        .branch_rob_id(branch_rob_id),
-        .actual_taken(actual_taken),
-        .mispredict(mispredict),
-        .jumpPC(jumpPC),
-        .update_pc(update_pc),
-        .nextPC(nextPC),
-        .rd_phy_branch(rd_phy_branch),
-        .isJump(isJump),
-        .busy_branch(busy_branch)
+        .exe_bus(exe_bus)
     );
 
 
@@ -522,97 +324,84 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
     always_ff @(posedge clk or posedge rst) begin
         if(rst) begin
             // alu outputs
-            alu_rob_id_reg   <= 0;
-            alu_output_reg   <= 0;
-            rd_phy_alu_reg   <= 0;
+            exe_bus_reg.alu_rob_id <= 0;
+            exe_bus_reg.alu_result <= 0;
+            exe_bus_reg.rd_phy_alu <= 0;
             // Load/Store outputs
-            store_waddr_reg  <= 0;
-            store_wdata_reg  <= 0;
-            store_rob_id_reg <= 0;
-            store_valid_reg  <= 0;
-            load_funct3_reg  <= 0;
-            load_valid_reg   <= 0;
-            load_raddr_reg   <= 0;
-            load_rob_id_reg  <= 0;
-            load_rd_phy_reg  <= 0;
+            exe_bus_reg.store_waddr <= 0;
+            exe_bus_reg.store_wdata <= 0;
+            exe_bus_reg.store_rob_id <= 0;
+            exe_bus_reg.store_valid  <= 0;
+            exe_bus_reg.load_funct3  <= 0;
+            exe_bus_reg.load_valid   <= 0;
+            exe_bus_reg.load_raddr   <= 0;
+            exe_bus_reg.load_rob_id  <= 0;
+            exe_bus_reg.load_rd_phy  <= 0;
             // Branch outputs
-            branch_rob_id_reg <= 0;
-            actual_taken_reg <= 0;
-            jumpPC_reg        <= 0;
-            nextPC_reg        <= 0;
-            update_pc_reg     <= 0;
-            rd_phy_branch_reg <= 0;
-            isJump_reg        <= 0;
-            mispredict_reg    <= 0;
-        end else 
+            exe_bus_reg.branch_rob_id <= 0;
+            exe_bus_reg.actual_taken  <= 0;
+            exe_bus_reg.actual_target <= 0;
+            exe_bus_reg.nextPC        <= 0;
+            exe_bus_reg.update_pc     <= 0;
+            exe_bus_reg.rd_phy_branch <= 0;
+            exe_bus_reg.isJump        <= 0;
+            exe_bus_reg.mispredict    <= 0;
+        end
+        // else if(flush)begin
+        //     // alu outputs
+        //     exe_bus_reg.alu_rob_id <= 0;
+        //     exe_bus_reg.alu_result <= 0;
+        //     exe_bus_reg.rd_phy_alu <= 0;
+        //     // Load/Store outputs
+        //     exe_bus_reg.store_waddr <= 0;
+        //     exe_bus_reg.store_wdata <= 0;
+        //     exe_bus_reg.store_rob_id <= 0;
+        //     exe_bus_reg.store_valid  <= 0;
+        //     exe_bus_reg.load_funct3  <= 0;
+        //     exe_bus_reg.load_valid   <= 0;
+        //     exe_bus_reg.load_raddr   <= 0;
+        //     exe_bus_reg.load_rob_id  <= 0;
+        //     exe_bus_reg.load_rd_phy  <= 0;
+        //     // Branch outputs
+        //     exe_bus_reg.branch_rob_id <= 0;
+        //     exe_bus_reg.actual_taken  <= 0;
+        //     exe_bus_reg.actual_target <= 0;
+        //     exe_bus_reg.nextPC        <= 0;
+        //     exe_bus_reg.update_pc     <= 0;
+        //     exe_bus_reg.rd_phy_branch <= 0;
+        //     exe_bus_reg.isJump        <= 0;
+        //     exe_bus_reg.mispredict    <= 0;
+        // end
+        else begin
             // alu outputs
-            if(alu_valid) begin
-                alu_rob_id_reg   <= alu_rob_id;
-                alu_output_reg   <= alu_output;
-                rd_phy_alu_reg   <= rd_phy_alu;
-                alu_valid_reg    <= alu_valid;
-            end
-            else begin
-                alu_rob_id_reg   <= 0;
-                alu_output_reg   <= 0;
-                rd_phy_alu_reg   <= 0;
-                alu_valid_reg    <= 0;
-            end
-            
+            exe_bus_reg.alu_rob_id   <= exe_bus.alu_rob_id;
+            exe_bus_reg.alu_result   <= exe_bus.alu_result;
+            exe_bus_reg.rd_phy_alu   <= exe_bus.rd_phy_alu;
+            exe_bus_reg.alu_valid    <= exe_bus.alu_valid;
             // Store outputs
-            if(store_valid) begin
-                store_waddr_reg  <= store_waddr;
-                store_wdata_reg  <= store_wdata;
-                store_rob_id_reg <= store_rob_id;
-                store_valid_reg  <= store_valid;
-            end
-            else begin
-                store_waddr_reg  <= 0;
-                store_wdata_reg  <= 0;
-                store_rob_id_reg <= 0;
-                store_valid_reg  <= 0;
-            end
+            exe_bus_reg.store_waddr  <= exe_bus.store_waddr;
+            exe_bus_reg.store_wdata  <= exe_bus.store_wdata;
+            exe_bus_reg.store_rob_id <= exe_bus.store_rob_id;
+            exe_bus_reg.store_valid  <= exe_bus.store_valid;
+
             // Load outputs
-            if(load_valid)begin
-                load_funct3_reg  <= load_funct3;
-                load_raddr_reg   <= load_raddr;
-                load_rob_id_reg  <= load_rob_id;
-                load_rd_phy_reg  <= load_rd_phy;
-                load_valid_reg   <= load_valid;
-            end
-            else begin
-                load_funct3_reg  <= 0;
-                load_raddr_reg   <= 0;
-                load_rob_id_reg  <= 0;
-                load_rd_phy_reg  <= 0;
-                load_valid_reg   <= 0;
-            end
-
-
+            exe_bus_reg.load_funct3  <= exe_bus.load_funct3;
+            exe_bus_reg.load_raddr   <= exe_bus.load_raddr;
+            exe_bus_reg.load_rob_id  <= exe_bus.load_rob_id;
+            exe_bus_reg.load_rd_phy  <= exe_bus.load_rd_phy;
+            exe_bus_reg.load_valid   <= exe_bus.load_valid;
             // Branch outputs
-            if(branch_valid) begin
-                branch_rob_id_reg <= branch_rob_id;
-                actual_taken_reg <= actual_taken;
-                jumpPC_reg        <= jumpPC;
-                nextPC_reg        <= nextPC;
-                update_pc_reg     <= update_pc;
-                rd_phy_branch_reg <= rd_phy_branch;
-                isJump_reg        <= isJump;
-                mispredict_reg    <= mispredict;
-                branch_valid_reg  <= branch_valid;
-            end
-            else begin
-                branch_rob_id_reg <= 0;
-                actual_taken_reg <= 0;
-                jumpPC_reg        <= 0;
-                update_pc_reg     <= 0;
-                nextPC_reg        <= 0;
-                rd_phy_branch_reg <= 0;
-                isJump_reg        <= 0;
-                mispredict_reg    <= 0;
-                branch_valid_reg  <= 0;
-            end
-            
+            exe_bus_reg.branch_valid  <= exe_bus.branch_valid;
+            exe_bus_reg.branch_rob_id <= exe_bus.branch_rob_id;
+            exe_bus_reg.actual_taken  <= exe_bus.actual_taken;
+            exe_bus_reg.mispredict    <= exe_bus.mispredict;
+            exe_bus_reg.actual_target <= exe_bus.actual_target;
+            exe_bus_reg.update_pc     <= exe_bus.update_pc;
+            exe_bus_reg.nextPC        <= exe_bus.nextPC;
+            exe_bus_reg.rd_phy_branch <= exe_bus.rd_phy_branch;
+            exe_bus_reg.isJump        <= exe_bus.isJump;
+
+        end  
         
     end
 
@@ -623,56 +412,9 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .rst(rst),
         .flush(flush),
         // ============== from Execution (enqueue candidates) =================
-        // from alu
-        .alu_rob_id(alu_rob_id_reg),
-        .alu_output(alu_output_reg),
-        .rd_phy_alu(rd_phy_alu_reg),
-        .alu_valid(alu_valid_reg),
-        // Store outputs
-        .store_waddr(store_waddr_reg),
-        .store_wdata(store_wdata_reg),
-        .store_rob_id(store_rob_id_reg),
-        .store_valid(store_valid_reg),
-        // Load outputs
-        .load_funct3(load_funct3_reg),
-        .load_valid(load_valid_reg),
-        .load_raddr(load_raddr_reg),
-        .load_rob_id(load_rob_id_reg),
-        .load_rd_phy(load_rd_phy_reg),
-        // Branch information
-        .branch_rob_id(branch_rob_id_reg),
-        .jumpPC(jumpPC_reg),
-        .nextPC(nextPC_reg),
-        .rd_phy_branch(rd_phy_branch_reg),
-        .actual_taken(actual_taken_reg),
-        .update_pc(update_pc_reg),
-        .mispredict(mispredict_reg),
-        .isJump(isJump_reg),
-        .branch_valid(branch_valid_reg),
+        .exe_to_wb_bus(exe_bus_reg),
         // ========== Physical Register & ROB Commit Interface  ===========
-        .commit_alu_rob_id(commit_alu_rob_id),
-        .commit_alu_valid(commit_alu_valid),
-        .commit_rd_alu(commit_rd_alu),
-        .commit_alu_result(commit_alu_result),
-        // load
-        .commit_load_valid(commit_load_valid),
-        .commit_load_rob_id(commit_load_rob_id),
-        .commit_rd_load(commit_rd_load),
-        .commit_load_rdata(commit_load_rdata),
-        // store
-        .commit_store_valid(commit_store_valid),
-        .commit_store_rob_id(commit_store_rob_id),
-        .commit_store_id(commit_store_id),
-        // branch
-        .commit_branch_valid(commit_branch_valid),
-        .commit_jump_valid(commit_jump_valid),
-        .commit_branch_rob_id(commit_branch_rob_id),
-        .commit_rd_branch(commit_rd_branch),
-        .commit_nextPC(commit_nextPC),
-        .commit_mispredict(commit_mispredict),
-        .commit_actual_target(commit_actual_target),
-        .commit_actual_taken(commit_actual_taken),
-        .commit_update_pc(commit_update_pc),
+        .wb_bus(wb_bus),
         // ========== Retire Interface ===========
         // Memory Interface
         .mem_rd_en(mem_rd_en),
@@ -680,8 +422,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .mem_rdata(mem_rdata),
         .mem_rdata_valid(mem_rdata_valid),
         // Retire Interface
-        .retire_store_valid(retire_store_valid_reg),
-        .retire_store_id(retire_store_id_reg),
+        .retire_store_bus(retire_bus_reg.retire_store_sink),
         .mem_write_en(mem_write_en),
         .mem_waddr(mem_waddr),
         .mem_wdata(mem_wdata)
@@ -689,75 +430,85 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
 
 
     always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
-            commit_alu_valid_reg     <= 1'b0;
-            commit_alu_rob_id_reg    <= 1'b0;
-            commit_rd_alu_reg        <= 1'b0;
-            commit_alu_result_reg    <= 1'b0;
-            commit_load_valid_reg    <= 1'b0;
-            commit_load_rob_id_reg   <= 1'b0;
-            commit_rd_load_reg       <= 'b0;
-            commit_load_rdata_reg    <= 'b0;
-            commit_store_valid_reg   <= 1'b0;
-            commit_store_rob_id_reg  <= 1'b0;
-            commit_store_id_reg      <= 'b0;
-            commit_branch_valid_reg  <= 1'b0;
-            commit_jump_valid_reg    <= 1'b0;
-            commit_branch_rob_id_reg <= 1'b0;
-            commit_rd_branch_reg     <= 1'b0;
-            commit_nextPC_reg        <= 1'b0;
-            commit_mispredict_reg    <= 1'b0;
-            commit_actual_target_reg <= 1'b0;
-            commit_actual_taken_reg  <= 1'b0;
-            commit_update_pc_reg     <= 1'b0;
+        if (rst)begin
+            wb_bus_reg.alu_valid    <= 1'b0;
+            wb_bus_reg.alu_rob_id   <= 'h0;
+            wb_bus_reg.rd_alu       <= 'h0;
+            wb_bus_reg.alu_result   <= 'h0;
+            wb_bus_reg.load_valid   <= 1'b0;
+            wb_bus_reg.load_rob_id  <= 'h0;
+            wb_bus_reg.rd_load      <= 'h0;
+            wb_bus_reg.load_rdata   <= 'h0;
+            wb_bus_reg.store_valid  <= 'h0;
+            wb_bus_reg.store_rob_id <= 'h0;
+            wb_bus_reg.store_id     <= 'h0;
+            wb_bus_reg.branch_valid <= 'h0;
+            wb_bus_reg.jump_valid   <= 'h0;
+            wb_bus_reg.branch_rob_id<= 'h0;
+            wb_bus_reg.rd_branch    <= 'h0;
+            wb_bus_reg.nextPC       <= 'h0;
+            wb_bus_reg.mispredict   <= 'h0;
+            wb_bus_reg.actual_target<= 'h0;
+            wb_bus_reg.actual_taken <= 'h0;
+            wb_bus_reg.update_pc    <= 'h0;
+        end
+        else if(flush)begin
+            wb_bus_reg.alu_valid    <= 1'b0;
+            wb_bus_reg.alu_rob_id   <= 'h0;
+            wb_bus_reg.rd_alu       <= 'h0;
+            wb_bus_reg.alu_result   <= 'h0;
+            wb_bus_reg.load_valid   <= 1'b0;
+            wb_bus_reg.load_rob_id  <= 'h0;
+            wb_bus_reg.rd_load      <= 'h0;
+            wb_bus_reg.load_rdata   <= 'h0;
+            wb_bus_reg.store_valid  <= 'h0;
+            wb_bus_reg.store_rob_id <= 'h0;
+            wb_bus_reg.store_id     <= 'h0;
+            wb_bus_reg.branch_valid <= 'h0;
+            wb_bus_reg.jump_valid   <= 'h0;
+            wb_bus_reg.branch_rob_id<= 'h0;
+            wb_bus_reg.rd_branch    <= 'h0;
+            wb_bus_reg.nextPC       <= 'h0;
+            wb_bus_reg.mispredict   <= 'h0;
+            wb_bus_reg.actual_target<= 'h0;
+            wb_bus_reg.actual_taken <= 'h0;
+            wb_bus_reg.update_pc    <= 'h0;
         end
         else begin
-            commit_alu_valid_reg     <= commit_alu_valid;
-            commit_alu_rob_id_reg    <= commit_alu_rob_id;
-            commit_rd_alu_reg        <= commit_rd_alu;
-            commit_alu_result_reg    <= commit_alu_result;
-            commit_load_valid_reg    <= commit_load_valid;
-            commit_load_rob_id_reg   <= commit_load_rob_id;
-            commit_rd_load_reg       <= commit_rd_load;
-            commit_load_rdata_reg    <= commit_load_rdata;
-            commit_store_valid_reg   <= commit_store_valid;
-            commit_store_rob_id_reg  <= commit_store_rob_id;
-            commit_store_id_reg      <= commit_store_id;
-            commit_branch_valid_reg  <= commit_branch_valid;
-            commit_jump_valid_reg    <= commit_jump_valid;
-            commit_branch_rob_id_reg <= commit_branch_rob_id;
-            commit_rd_branch_reg     <= commit_rd_branch;
-            commit_nextPC_reg        <= commit_nextPC;
-            commit_mispredict_reg    <= commit_mispredict;
-            commit_actual_target_reg <= commit_actual_target;
-            commit_actual_taken_reg  <= commit_actual_taken;
-            commit_update_pc_reg     <= commit_update_pc;
+            wb_bus_reg.alu_valid    <= wb_bus.alu_valid;
+            wb_bus_reg.alu_rob_id   <= wb_bus.alu_rob_id;
+            wb_bus_reg.rd_alu       <= wb_bus.rd_alu;
+            wb_bus_reg.alu_result   <= wb_bus.alu_result;
+            wb_bus_reg.load_valid   <= wb_bus.load_valid;
+            wb_bus_reg.load_rob_id  <= wb_bus.load_rob_id;
+            wb_bus_reg.rd_load      <= wb_bus.rd_load;
+            wb_bus_reg.load_rdata   <= wb_bus.load_rdata;
+            wb_bus_reg.store_valid  <= wb_bus.store_valid;
+            wb_bus_reg.store_rob_id <= wb_bus.store_rob_id;
+            wb_bus_reg.store_id     <= wb_bus.store_id;
+            wb_bus_reg.branch_valid <= wb_bus.branch_valid;
+            wb_bus_reg.jump_valid   <= wb_bus.jump_valid;
+            wb_bus_reg.branch_rob_id<= wb_bus.branch_rob_id;
+            wb_bus_reg.rd_branch    <= wb_bus.rd_branch;
+            wb_bus_reg.nextPC       <= wb_bus.nextPC;
+            wb_bus_reg.mispredict   <= wb_bus.mispredict;
+            wb_bus_reg.actual_target<= wb_bus.actual_target;
+            wb_bus_reg.actual_taken <= wb_bus.actual_taken;
+            wb_bus_reg.update_pc    <= wb_bus.update_pc;
         end
-    end 
+    end
+
 
     // ============= Common ==================
     Front_RAT #(ARCH_REGS, PHY_WIDTH) front_rat (
         .clk(clk),
         .rst(rst),
         .flush(flush),
-        .done(retire_done_valid_reg),
-        // first instruction
-        .instr_valid(instr_valid),
-        .rs1_arch_0(rs1_arch_0),
-        .rs2_arch_0(rs2_arch_0),
-        .rd_arch_0(rd_arch_0),
-        .rd_phy_new_0(rd_phy_new_0),
-        .rs1_phy_0(rs1_phy_0),
-        .rs2_phy_0(rs2_phy_0),
-        .rd_phy_0(rd_phy_0),
-        // second instruction
-        .rs1_arch_1(rs1_arch_1),
-        .rs2_arch_1(rs2_arch_1),
-        .rd_arch_1(rd_arch_1),
-        .rd_phy_new_1(rd_phy_new_1),
-        .rs1_phy_1(rs1_phy_1),
-        .rs2_phy_1(rs2_phy_1),
-        .rd_phy_1(rd_phy_1),
+        .done(done_valid),
+        .rat_0_bus(rename_0.rat_sink),
+        .rat_1_bus(rename_1.rat_sink),
+        .freelist_0_bus(rename_0.freelist_sink),
+        .freelist_1_bus(rename_1.freelist_sink),
         // BACK_RAT will handle commit updates
         .back_rat(back_rat),
         .front_rat_out(front_rat_out)
@@ -769,15 +520,13 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .flush(flush),
         .full(free_list_full),
         .empty(free_list_empty),
-        .done(retire_done_valid_reg),
+        .done(done_valid),
         // rename interface to allocate physical registers
-        .valid(free_list_valid),
-        .rd_phy_new_0(rd_phy_new_0),
-        .rd_phy_new_1(rd_phy_new_1),
+        .freelist_0_bus(rename_0.freelist_sink),
+        .freelist_1_bus(rename_1.freelist_sink),
+        // retire
         // commit interface to free physical registers
-        .retire_valid(retire_pr_valid_reg),
-        .rd_phy_old_commit(rd_phy_old_commit_reg),
-        .rd_phy_new_commit(rd_phy_new_commit_reg)
+        .retire_pr_bus(retire_bus_reg.retire_pr_sink)
     );
 
     logic [ROB_WIDTH-1:0] rob_debug;
@@ -786,24 +535,11 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .clk(clk),
         .rst(rst),
         .flush(flush),
-        .dispatch_valid(dispatch_valid),
-        .dispatch_rob_0(dispatch_rob_0),
+        .rob_entry_0(rob_entry_0),
         .rob_id_0(rob_id_0),
-        .dispatch_rob_1(dispatch_rob_1),
+        .rob_entry_1(rob_entry_1),
         .rob_id_1(rob_id_1),
-        .commit_alu_valid(commit_alu_valid_reg),
-        .commit_alu_rob_id(commit_alu_rob_id_reg),
-        .commit_load_valid(commit_load_valid_reg),
-        .commit_load_rob_id(commit_load_rob_id_reg),
-        .commit_store_valid(commit_store_valid_reg),
-        .commit_store_rob_id(commit_store_rob_id_reg),
-        .commit_store_id(commit_store_id_reg),
-        .commit_branch_valid(commit_branch_valid_reg),
-        .commit_branch_rob_id(commit_branch_rob_id_reg),
-        .commit_mispredict(commit_mispredict_reg),
-        .commit_actual_target(commit_actual_target_reg),
-        .commit_actual_taken(commit_actual_taken_reg),
-        .commit_update_pc(commit_update_pc_reg),
+        .wb_to_rob_bus(wb_bus_reg.sink),
         // outputs to backend/architectural state
         // rob_status outputs (used in retire stage)
         .rob_finish(ROB_FINISH),
@@ -820,53 +556,44 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .ROB_FINISH(ROB_FINISH),
         .ROB(ROB),
         .rob_head(rob_head),
-        .isFlush(isFlush),
-        .targetPC(targetPC),
-        .rd_arch_commit(rd_arch_commit),
-        .rd_phy_new_commit(rd_phy_new_commit),
-        .rd_phy_old_commit(rd_phy_old_commit),
-        .update_btb_pc(update_btb_pc),
-        .update_btb_taken(update_btb_taken),
-        .update_btb_target(update_btb_target),
-        .retire_pr_valid(retire_pr_valid),
-        .retire_store_valid(retire_store_valid),
-        .retire_store_id(retire_store_id),
-        .retire_branch_valid(retire_branch_valid),
-        .retire_done_valid(retire_done_valid),
-        .rob_debug(rob_debug),
-        .retire_addr(retire_addr)
+        .retire_bus(retire_bus.retire_source)
     );
 
     
-
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
-            rd_arch_commit_reg      <= 'h0;
-            rd_phy_old_commit_reg   <= 'h0;
-            rd_phy_new_commit_reg   <= 'h0;
-            update_btb_pc_reg       <= 'h0;
-            update_btb_taken_reg    <= 1'b0;
-            update_btb_target_reg   <= 'h0;
-            retire_pr_valid_reg     <= 1'b0;
-            retire_store_valid_reg  <= 1'b0;
-            retire_store_id_reg     <= 'h0;
-            retire_branch_valid_reg <= 1'b0;
-            retire_done_valid_reg   <= 1'b0;
-            rob_debug_reg           <= 'h0;
+            retire_bus_reg.isFlush             <= 1'b0;
+            retire_bus_reg.targetPC            <= 'h0;
+            retire_bus_reg.rd_arch             <= 'h0;
+            retire_bus_reg.rd_phy_old          <= 'h0;
+            retire_bus_reg.rd_phy_new          <= 'h0;
+            retire_bus_reg.update_btb_pc       <= 'h0;
+            retire_bus_reg.update_btb_taken    <= 1'b0;
+            retire_bus_reg.update_btb_target   <= 'h0;
+            retire_bus_reg.retire_pr_valid     <= 1'b0;
+            retire_bus_reg.retire_store_valid  <= 1'b0;
+            retire_bus_reg.retire_store_id     <= 'h0;
+            retire_bus_reg.retire_branch_valid <= 1'b0;
+            retire_bus_reg.retire_done_valid   <= 1'b0;
+            retire_bus_reg.rob_debug           <= 'h0;
+            retire_bus_reg.retire_addr         <= 'h0;
         end
         else begin
-            rd_arch_commit_reg      <= rd_arch_commit;
-            rd_phy_old_commit_reg   <= rd_phy_old_commit;
-            rd_phy_new_commit_reg   <= rd_phy_new_commit;
-            update_btb_pc_reg       <= update_btb_pc;
-            update_btb_taken_reg    <= update_btb_taken;
-            update_btb_target_reg   <= update_btb_target;
-            retire_pr_valid_reg     <= retire_pr_valid;
-            retire_store_valid_reg  <= retire_store_valid;
-            retire_store_id_reg     <= retire_store_id;
-            retire_branch_valid_reg <= retire_branch_valid;
-            retire_done_valid_reg   <= retire_done_valid;
-            rob_debug_reg           <= rob_debug;
+            retire_bus_reg.isFlush             <= retire_bus.isFlush;
+            retire_bus_reg.targetPC            <= retire_bus.targetPC;
+            retire_bus_reg.rd_arch             <= retire_bus.rd_arch;
+            retire_bus_reg.rd_phy_old          <= retire_bus.rd_phy_old;
+            retire_bus_reg.rd_phy_new          <= retire_bus.rd_phy_new;
+            retire_bus_reg.update_btb_pc       <= retire_bus.update_btb_pc;
+            retire_bus_reg.update_btb_taken    <= retire_bus.update_btb_taken;
+            retire_bus_reg.update_btb_target   <= retire_bus.update_btb_target;
+            retire_bus_reg.retire_pr_valid     <= retire_bus.retire_pr_valid;
+            retire_bus_reg.retire_store_valid  <= retire_bus.retire_store_valid;
+            retire_bus_reg.retire_store_id     <= retire_bus.retire_store_id;
+            retire_bus_reg.retire_branch_valid <= retire_bus.retire_branch_valid;
+            retire_bus_reg.retire_done_valid   <= retire_bus.retire_done_valid;
+            retire_bus_reg.rob_debug           <= retire_bus.rob_debug;
+            retire_bus_reg.retire_addr         <= retire_bus.retire_addr;
         end
     end
 
@@ -874,15 +601,14 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .clk(clk),
         .rst(rst),
         .flush(flush),
-        .retire_valid(retire_pr_valid_reg),
-        .rd_arch_commit(rd_arch_commit_reg),
-        .rd_phy_new_commit(rd_phy_new_commit_reg),
+        .retire_pr_bus(retire_bus_reg.retire_pr_sink),
         .back_rat(back_rat)
     );
 
     Control Control_Unit(
         .clk(clk),
         .rst(rst),
+        .flush(flush),
         .rob_full(rob_full),
         .rob_empty(rob_empty),
         .pc_valid(pc_valid),
@@ -896,53 +622,34 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         .clk(clk),
         .rst(rst),
         .flush(flush),
-        .done(retire_done_valid_reg),
+        .done(done_valid),
         .busy_valid(busy_valid),
         .rd_phy_busy_0(rd_phy_busy_0),
         .rd_phy_busy_1(rd_phy_busy_1),
         .PRF_busy(PRF_busy),
         // ========== read execution interface ===========
         .PRF_valid(PRF_valid),
-        // alu
-        .rs1_phy_alu(rs1_phy_alu),               
-        .rs2_phy_alu(rs2_phy_alu),
-        .rs1_data_alu(rs1_data_alu),
-        .rs2_data_alu(rs2_data_alu),
-        .alu_valid(alu_valid),
-        // load/store 
-        .rs1_phy_ls(rs1_phy_ls),
-        .rs2_phy_ls(rs2_phy_ls),
-        .rs1_data_ls(rs1_data_ls),
-        .rs2_data_ls(rs2_data_ls),
-        .ls_valid(ls_valid),
-        // branch
-        .rs1_phy_branch(rs1_phy_branch),
-        .rs2_phy_branch(rs2_phy_branch),
-        .rs1_data_branch(rs1_data_branch),
-        .rs2_data_branch(rs2_data_branch),
-        .branch_valid(branch_valid),
+        .alu_prf_bus(alu_prf_bus.sink),
+        .lsu_prf_bus(lsu_prf_bus.sink),
+        .branch_prf_bus(branch_prf_bus.sink),
         // =========== writeback interface =================
-        .commit_alu_valid(commit_alu_valid_reg),
-        .commit_rd_alu(commit_rd_alu_reg),
-        .commit_alu_result(commit_alu_result_reg),
-        .commit_load_valid(commit_load_valid_reg),
-        .commit_rd_load(commit_rd_load_reg),
-        .commit_load_rdata(commit_load_rdata_reg),
-        .commit_jump_valid(commit_jump_valid_reg),
-        .commit_branch_valid(commit_branch_valid_reg),
-        .commit_rd_branch(commit_rd_branch_reg),
-        .commit_nextPC(commit_nextPC_reg),
+        .wb_to_prf_bus(wb_bus_reg.sink),
         // from retire stage
         // =========== commit interface =================
-        .rd_phy_old_commit(rd_phy_old_commit_reg),
-        .rd_phy_new_commit(rd_phy_new_commit_reg),
-        .retire_valid(retire_pr_valid_reg),
+        .retire_pr_bus(retire_bus_reg.retire_pr_sink),
+        // ===========
         // outputs for debug
         .PRF_data_out(PRF_data_out),
         .PRF_busy_out(PRF_busy_out),
         .PRF_valid_out(PRF_valid_out)
     );
 
+
+    // ============= Debugging ==================
+    assign back_rat_out = back_rat;
+
+    assign retire_addr_reg  = (flush) ? 'h0 : retire_bus_reg.retire_addr;
+    assign retire_valid_reg = (flush) ? 1'b0 : (retire_bus_reg.retire_pr_valid || retire_bus_reg.retire_store_valid || retire_bus_reg.retire_branch_valid);
     logic [ROB_WIDTH-1:0] retire_count;
 
     always_ff @(posedge clk or posedge rst) begin
@@ -952,7 +659,7 @@ module O3O_CPU #(parameter ADDR_WIDTH = 32,
         else if(flush) begin
             retire_count <= 0;
         end
-        else if (retire_pr_valid || retire_store_valid || retire_branch_valid) begin
+        else if (retire_bus_reg.retire_pr_valid || retire_bus_reg.retire_store_valid || retire_bus_reg.retire_branch_valid) begin
             retire_count <= retire_count + 1;
         end
     end

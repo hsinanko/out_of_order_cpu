@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 package parameter_pkg;
 
     parameter ADDR_WIDTH = 32;

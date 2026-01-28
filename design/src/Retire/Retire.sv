@@ -7,26 +7,12 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 32, 
     input  logic [NUM_ROB_ENTRY-1:0]       ROB_FINISH,
     input  ROB_ENTRY_t ROB[NUM_ROB_ENTRY-1:0],
     input  logic [ROB_WIDTH-1:0]  rob_head,
-    output logic                  isFlush,
-    output logic [4:0]            targetPC,
-    output logic [4:0]            rd_arch_commit,
-    output logic [PHY_WIDTH-1:0]  rd_phy_old_commit,
-    output logic [PHY_WIDTH-1:0]  rd_phy_new_commit,
-    output logic [ADDR_WIDTH-1:0] update_btb_pc,
-    output logic [ADDR_WIDTH-1:0] update_btb_target,
-    output logic                  update_btb_taken,
-    output logic                  retire_pr_valid,
-    output logic                  retire_store_valid, // retire store valid
-    output logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id,
-    output logic                  retire_branch_valid,
-    output logic                  retire_done_valid,
-    output logic [ROB_WIDTH-1:0] rob_debug,
-    output logic [ADDR_WIDTH-1:0] retire_addr
+    retire_if.retire_source retire_bus
 );
 
 
 
-    logic isALU, isLoad, isStore, isBranch;
+    logic isALU, isLoad, isStore, isBranch, isJump, isSystem;
     assign isALU = (ROB[rob_head].opcode == OP_IMM || ROB[rob_head].opcode == OP || ROB[rob_head].opcode == LUI || ROB[rob_head].opcode == AUIPC);
     assign isLoad = (ROB[rob_head].opcode == LOAD);
     assign isStore = (ROB[rob_head].opcode == STORE);
@@ -37,18 +23,18 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 32, 
 
     always_ff @(posedge clk or posedge rst) begin
         if(rst)begin
-            isFlush <= 1'b0;
+            retire_bus.isFlush <= 1'b0;
         end
         else if(flush) begin
-            isFlush <= 1'b0;
+            retire_bus.isFlush <= 1'b0;
         end
         else begin
             if(ROB_FINISH[rob_head] && (isBranch || isJump)) begin
-                isFlush  <= ROB[rob_head].mispredict;
-                targetPC <= ROB[rob_head].actual_target;
+                retire_bus.isFlush  <= ROB[rob_head].mispredict;
+                retire_bus.targetPC <= ROB[rob_head].actual_target;
             end
             else begin
-                isFlush <= 1'b0;
+                retire_bus.isFlush <= 1'b0;
             end
         end
     end
@@ -56,125 +42,125 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 32, 
 
     always_comb begin
         if(flush)begin
-            rd_arch_commit      = 'h0;
-            rd_phy_old_commit   = 'h0;
-            rd_phy_new_commit   = 'h0;
-            update_btb_pc       = 'h0;
-            update_btb_taken    = 1'b0;
-            update_btb_target   = 'h0;
-            retire_pr_valid     = 1'b0;
-            retire_store_valid  = 1'b0;
-            retire_store_id     = '0;
-            retire_branch_valid = 1'b0;
-            retire_done_valid   = 1'b0;
+            retire_bus.rd_arch             = 'h0;
+            retire_bus.rd_phy_old          = 'h0;
+            retire_bus.rd_phy_new          = 'h0;
+            retire_bus.update_btb_pc       = 'h0;
+            retire_bus.update_btb_taken    = 1'b0;
+            retire_bus.update_btb_target   = 'h0;
+            retire_bus.retire_pr_valid     = 1'b0;
+            retire_bus.retire_store_valid  = 1'b0;
+            retire_bus.retire_store_id     = '0;
+            retire_bus.retire_branch_valid = 1'b0;
+            retire_bus.retire_done_valid   = 1'b0;
         end
         else if(ROB_FINISH[rob_head]) begin
-            rob_debug   = rob_head;
-            retire_addr = ROB[rob_head].addr;
+            retire_bus.rob_debug   = rob_head;
+            retire_bus.retire_addr = ROB[rob_head].addr;
             if(isALU) begin
-                rd_arch_commit      = ROB[rob_head].rd_arch;
-                rd_phy_old_commit   = ROB[rob_head].rd_phy_old;
-                rd_phy_new_commit   = ROB[rob_head].rd_phy_new;
-                update_btb_pc       = '0;
-                update_btb_taken    = '0;             
-                update_btb_target   = '0;
-                retire_pr_valid     = 1'b1;
-                retire_store_valid  = 1'b0;
-                retire_store_id     = '0;
-                retire_branch_valid = 1'b0;
-                retire_done_valid   = 1'b0;
+                retire_bus.rd_arch             = ROB[rob_head].rd_arch;
+                retire_bus.rd_phy_old          = ROB[rob_head].rd_phy_old;
+                retire_bus.rd_phy_new          = ROB[rob_head].rd_phy_new;
+                retire_bus.update_btb_pc       = '0;
+                retire_bus.update_btb_taken    = '0;             
+                retire_bus.update_btb_target   = '0;
+                retire_bus.retire_pr_valid     = 1'b1;
+                retire_bus.retire_store_valid  = 1'b0;
+                retire_bus.retire_store_id     = '0;
+                retire_bus.retire_branch_valid = 1'b0;
+                retire_bus.retire_done_valid   = 1'b0;
             end
             else if(isLoad) begin
-                rd_arch_commit      = ROB[rob_head].rd_arch;
-                rd_phy_old_commit   = ROB[rob_head].rd_phy_old;
-                rd_phy_new_commit   = ROB[rob_head].rd_phy_new;
-                update_btb_pc       = '0;
-                update_btb_taken    = '0;
-                update_btb_target   = '0;
-                retire_pr_valid     = 1'b1;
-                retire_store_valid  = 1'b0;
-                retire_store_id     = '0;
-                retire_branch_valid = 1'b0;
-                retire_done_valid   = 1'b0;
+                retire_bus.rd_arch             = ROB[rob_head].rd_arch;
+                retire_bus.rd_phy_old          = ROB[rob_head].rd_phy_old;
+                retire_bus.rd_phy_new          = ROB[rob_head].rd_phy_new;
+                retire_bus.update_btb_pc       = '0;
+                retire_bus.update_btb_taken    = '0;
+                retire_bus.update_btb_target   = '0;
+                retire_bus.retire_pr_valid     = 1'b1;
+                retire_bus.retire_store_valid  = 1'b0;
+                retire_bus.retire_store_id     = '0;
+                retire_bus.retire_branch_valid = 1'b0;
+                retire_bus.retire_done_valid   = 1'b0;
             end
             else if(isStore) begin
-                rd_arch_commit      = ROB[rob_head].rd_arch;
-                rd_phy_old_commit   = ROB[rob_head].rd_phy_old;
-                rd_phy_new_commit   = ROB[rob_head].rd_phy_new;
-                update_btb_pc       = '0;
-                update_btb_taken    = '0;
-                update_btb_target   = '0;
-                retire_pr_valid     = 1'b0;
-                retire_store_valid  = 1'b1;
-                retire_store_id     = ROB[rob_head].store_id;
-                retire_branch_valid = 1'b0;
-                retire_done_valid   = 1'b0;
+                retire_bus.rd_arch             = ROB[rob_head].rd_arch;
+                retire_bus.rd_phy_old          = ROB[rob_head].rd_phy_old;
+                retire_bus.rd_phy_new          = ROB[rob_head].rd_phy_new;
+                retire_bus.update_btb_pc       = '0;
+                retire_bus.update_btb_taken    = '0;
+                retire_bus.update_btb_target   = '0;
+                retire_bus.retire_pr_valid     = 1'b0;
+                retire_bus.retire_store_valid  = 1'b1;
+                retire_bus.retire_store_id     = ROB[rob_head].store_id;
+                retire_bus.retire_branch_valid = 1'b0;
+                retire_bus.retire_done_valid   = 1'b0;
             end
             else if(isBranch) begin
-                rd_arch_commit      = 'h0;
-                rd_phy_old_commit   = 'h0;
-                rd_phy_new_commit   = 'h0;
-                update_btb_pc       = ROB[rob_head].update_pc;
-                update_btb_taken    = ROB[rob_head].actual_taken;
-                update_btb_target   = ROB[rob_head].actual_target;
-                retire_pr_valid     = 1'b0;
-                retire_store_valid  = 1'b0;
-                retire_store_id     = '0;
-                retire_branch_valid = 1'b1;
-                retire_done_valid   = 1'b0;
+                retire_bus.rd_arch             = 'h0;
+                retire_bus.rd_phy_old          = 'h0;
+                retire_bus.rd_phy_new          = 'h0;
+                retire_bus.update_btb_pc       = ROB[rob_head].update_pc;
+                retire_bus.update_btb_taken    = ROB[rob_head].actual_taken;
+                retire_bus.update_btb_target   = ROB[rob_head].actual_target;
+                retire_bus.retire_pr_valid     = 1'b0;
+                retire_bus.retire_store_valid  = 1'b0;
+                retire_bus.retire_store_id     = '0;
+                retire_bus.retire_branch_valid = 1'b1;
+                retire_bus.retire_done_valid   = 1'b0;
             end
             else if(isJump)begin
-                rd_arch_commit      = ROB[rob_head].rd_arch;
-                rd_phy_old_commit   = ROB[rob_head].rd_phy_old;
-                rd_phy_new_commit   = ROB[rob_head].rd_phy_new;
-                update_btb_pc       = ROB[rob_head].update_pc;
-                update_btb_taken    = ROB[rob_head].actual_taken;
-                update_btb_target   = ROB[rob_head].actual_target;
-                retire_pr_valid     = (rd_arch_commit != 'h0) ? 1'b1 : 1'b0;
-                retire_store_valid  = 1'b0;
-                retire_store_id     = '0;
-                retire_branch_valid = 1'b1;
-                retire_done_valid   = 1'b0;
+                retire_bus.rd_arch             = ROB[rob_head].rd_arch;
+                retire_bus.rd_phy_old          = ROB[rob_head].rd_phy_old;
+                retire_bus.rd_phy_new          = ROB[rob_head].rd_phy_new;
+                retire_bus.update_btb_pc       = ROB[rob_head].update_pc;
+                retire_bus.update_btb_taken    = ROB[rob_head].actual_taken;
+                retire_bus.update_btb_target   = ROB[rob_head].actual_target;
+                retire_bus.retire_pr_valid     = (retire_bus.rd_arch != 'h0) ? 1'b1 : 1'b0;
+                retire_bus.retire_store_valid  = 1'b0;
+                retire_bus.retire_store_id     = '0;
+                retire_bus.retire_branch_valid = 1'b1;
+                retire_bus.retire_done_valid   = 1'b0;
             end
             else if(isSystem)begin
-                rd_arch_commit      = 'h0;
-                rd_phy_old_commit   = 'h0;
-                rd_phy_new_commit   = 'h0;
-                update_btb_pc       = 'h0;
-                update_btb_taken    = 'b0;
-                update_btb_target   = 'h0;
-                retire_pr_valid     = 1'b0;
-                retire_store_valid  = 1'b0;
-                retire_store_id     = '0;
-                retire_branch_valid = 1'b0;
-                retire_done_valid   = 1'b1;
+                retire_bus.rd_arch             = 'h0;
+                retire_bus.rd_phy_old          = 'h0;
+                retire_bus.rd_phy_new          = 'h0;
+                retire_bus.update_btb_pc       = 'h0;
+                retire_bus.update_btb_taken    = 'b0;
+                retire_bus.update_btb_target   = 'h0;
+                retire_bus.retire_pr_valid     = 1'b0;
+                retire_bus.retire_store_valid  = 1'b0;
+                retire_bus.retire_store_id     = '0;
+                retire_bus.retire_branch_valid = 1'b0;
+                retire_bus.retire_done_valid   = 1'b1;
             end
             else begin
-                rd_arch_commit      = 'h0;
-                rd_phy_old_commit   = 'h0;
-                rd_phy_new_commit   = 'h0;
-                update_btb_pc       = 'h0;
-                update_btb_taken    = 1'b0;
-                update_btb_target   = 'h0;
-                retire_pr_valid     = 1'b0;
-                retire_store_valid  = 1'b0;
-                retire_store_id     = '0;
-                retire_branch_valid = 1'b0;
-                retire_done_valid   = 1'b0;
+                retire_bus.rd_arch             = 'h0;
+                retire_bus.rd_phy_old          = 'h0;
+                retire_bus.rd_phy_new          = 'h0;
+                retire_bus.update_btb_pc       = 'h0;
+                retire_bus.update_btb_taken    = 1'b0;
+                retire_bus.update_btb_target   = 'h0;
+                retire_bus.retire_pr_valid     = 1'b0;
+                retire_bus.retire_store_valid  = 1'b0;
+                retire_bus.retire_store_id     = '0;
+                retire_bus.retire_branch_valid = 1'b0;
+                retire_bus.retire_done_valid   = 1'b0;
             end
         end
         else begin
-            rd_arch_commit      = 'h0;
-            rd_phy_old_commit   = 'h0;
-            rd_phy_new_commit   = 'h0;
-            update_btb_pc       = 'h0;
-            update_btb_taken    = 1'b0;
-            update_btb_target   = 'h0;
-            retire_pr_valid     = 1'b0;
-            retire_store_valid  = 1'b0;
-            retire_store_id     = '0;
-            retire_branch_valid = 1'b0;
-            retire_done_valid   = 1'b0;
+            retire_bus.rd_arch             = 'h0;
+            retire_bus.rd_phy_old          = 'h0;
+            retire_bus.rd_phy_new          = 'h0;
+            retire_bus.update_btb_pc       = 'h0;
+            retire_bus.update_btb_taken    = 1'b0;
+            retire_bus.update_btb_target   = 'h0;
+            retire_bus.retire_pr_valid     = 1'b0;
+            retire_bus.retire_store_valid  = 1'b0;
+            retire_bus.retire_store_id     = '0;
+            retire_bus.retire_branch_valid = 1'b0;
+            retire_bus.retire_done_valid   = 1'b0;
         end
     end
 

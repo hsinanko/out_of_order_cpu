@@ -25,7 +25,7 @@ module DataMemory #(
     logic [7:0] bytes [0:3];
     logic [15:0] half;
     // word index computed from byte address (word-aligned accesses expected)
-
+    logic [ADDR_WIDTH-3:0] word_idx;
     assign memory_index = raddr[1:0];
     assign word_idx = raddr[ADDR_WIDTH-1:2];
 
