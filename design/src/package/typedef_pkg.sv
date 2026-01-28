@@ -3,6 +3,27 @@ package typedef_pkg;
     import parameter_pkg::*;
     
     typedef struct{
+        logic [ADDR_WIDTH-1:0] addr;
+        logic [DATA_WIDTH-1:0] data;
+        logic valid;
+    }fetch_t;
+
+    typedef struct{
+        logic predict_taken;
+        logic [ADDR_WIDTH-1:0] predict_target;
+    }predict_t;
+
+    
+    // BTB Entry Structure
+    typedef struct packed {
+        logic                     valid;
+        logic                     taken;
+        logic [(ADDR_WIDTH-BTB_WIDTH-3):0] tag;
+        logic [ADDR_WIDTH-1:0]    target;
+    } BTB_ENTRY_t;
+
+
+    typedef struct{
         logic [ADDR_WIDTH-1:0] addr;        // program counter
         logic [6:0] opcode;      // opcode field
         logic [6:0] funct7;      // funct7 field

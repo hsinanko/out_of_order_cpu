@@ -33,6 +33,7 @@ IF = \
 
 ID = \
 		../src/Decode/ReservationStation/FreeSlot.sv \
+		../src/Decode/ReservationStation/Search.sv \
 		../src/Decode/ReservationStation/ReservationStation.sv \
 		../src/Decode/Dispatch.sv \
 		../src/Decode/Rename.sv \

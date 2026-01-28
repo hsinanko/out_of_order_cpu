@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+import typedef_pkg::*;
 
 module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB_ENTRIES))(
     input  logic                     clk,
@@ -7,21 +8,11 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
     input  logic [ADDR_WIDTH-1:0]    pc,
     input  logic                     pc_valid,
     // Output to Fetch Stage
-    output logic                     predict_taken_0,
-    output logic [ADDR_WIDTH-1:0]    predict_target_0,
-    output logic                     predict_taken_1,
-    output logic [ADDR_WIDTH-1:0]    predict_target_1,
+    output predict_t              predict_0,
+    output predict_t              predict_1,
     // Input from Commit Stage
     retire_if.retire_branch_sink   retire_branch_bus
 );
-
-    // BTB Entry Structure
-    typedef struct packed {
-        logic                     valid;
-        logic                     taken;
-        logic [(ADDR_WIDTH-BTB_WIDTH-3):0] tag;
-        logic [ADDR_WIDTH-1:0]    target;
-    } BTB_ENTRY_t;
 
     // BTB Storage
     BTB_ENTRY_t btb [BTB_ENTRIES];
@@ -36,29 +27,29 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
             index = pc[BTB_WIDTH+1:2];
             entry = btb[index];
             if (entry.valid && entry.taken && entry.tag == pc[ADDR_WIDTH-1:BTB_WIDTH+2]) begin
-                predict_taken_0 = 1;
-                predict_target_0 = entry.target;
+                predict_0.predict_taken = 1;
+                predict_0.predict_target = entry.target;
 
             end else begin
-                predict_taken_0 = 0;
-                predict_target_0 = pc + 4;
+                predict_0.predict_taken = 0;
+                predict_0.predict_target = pc + 4;
             end
 
-            index = predict_target_0[BTB_WIDTH+1:2];
+            index = predict_0.predict_target[BTB_WIDTH+1:2];
             entry = btb[index];
-            if (entry.valid && entry.taken && entry.tag == predict_target_0[ADDR_WIDTH-1:BTB_WIDTH+2]) begin
-                predict_taken_1 = 1;
-                predict_target_1 = entry.target;
+            if (entry.valid && entry.taken && entry.tag == predict_0.predict_target[ADDR_WIDTH-1:BTB_WIDTH+2]) begin
+                predict_1.predict_taken = 1;
+                predict_1.predict_target = entry.target;
             end
             else begin
-                predict_taken_1 = 0;
-                predict_target_1 = predict_target_0 + 4;
+                predict_1.predict_taken = 0;
+                predict_1.predict_target = predict_0.predict_target + 4;
             end
         end else begin
-            predict_taken_0 = 0;
-            predict_target_0 = pc + 4;
-            predict_taken_1 = 0;
-            predict_target_1 = predict_target_0 + 4;
+            predict_0.predict_taken = 0;
+            predict_0.predict_target = pc + 4;
+            predict_1.predict_taken = 0;
+            predict_1.predict_target = predict_0.predict_target + 4;
         end
     end
 

@@ -10,9 +10,6 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     input  RS_ENTRY_t issue_instruction_alu,
     input  RS_ENTRY_t issue_instruction_ls,
     input  RS_ENTRY_t issue_instruction_branch,
-    input  logic issue_alu_valid,
-    input  logic issue_ls_valid,
-    input  logic issue_branch_valid,
     // read data from physical register
     physical_if.source alu_prf_bus,
     physical_if.source lsu_prf_bus,
@@ -27,7 +24,7 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
 
     assign alu_prf_bus.rs1_phy = issue_instruction_alu.rs1_phy;
     assign alu_prf_bus.rs2_phy = issue_instruction_alu.rs2_phy;
-    assign alu_prf_bus.valid   = issue_alu_valid;
+    assign alu_prf_bus.valid   = issue_instruction_alu.valid;
 
     
     ALUControl alu_ctrl(
@@ -52,7 +49,7 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
 
 
     always_comb begin
-        exe_bus.alu_valid  = issue_alu_valid;
+        exe_bus.alu_valid  = issue_instruction_alu.valid;
         exe_bus.alu_result = alu_result;
         exe_bus.alu_rob_id = issue_instruction_alu.rob_id;
         exe_bus.rd_phy_alu = issue_instruction_alu.rd_phy;
@@ -71,7 +68,7 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     
     assign lsu_prf_bus.rs1_phy = issue_instruction_ls.rs1_phy;
     assign lsu_prf_bus.rs2_phy = issue_instruction_ls.rs2_phy;
-    assign lsu_prf_bus.valid   = issue_ls_valid;
+    assign lsu_prf_bus.valid   = issue_instruction_ls.valid;
 
     assign rd_phy_ls  = issue_instruction_ls.rd_phy;
     assign funct3_ls = issue_instruction_ls.funct3;
@@ -80,9 +77,9 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     always_comb begin
         addr  = lsu_prf_bus.rs1_data + issue_instruction_ls.immediate;
         data = lsu_prf_bus.rs2_data;
-        isLoad  = (issue_ls_valid) ? (issue_instruction_ls.opcode == LOAD) : 0;
-        isStore = (issue_ls_valid) ? (issue_instruction_ls.opcode == STORE) : 0;
-        ls_rob_id = (issue_ls_valid) ? issue_instruction_ls.rob_id : 0;
+        isLoad  = (issue_instruction_ls.valid) ? (issue_instruction_ls.opcode == LOAD) : 0;
+        isStore = (issue_instruction_ls.valid) ? (issue_instruction_ls.opcode == STORE) : 0;
+        ls_rob_id = (issue_instruction_ls.valid) ? issue_instruction_ls.rob_id : 0;
     end
 
     AddressGenerator #(ADDR_WIDTH, DATA_WIDTH, ROB_WIDTH, PHY_WIDTH) load_store_unit(
@@ -109,12 +106,12 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     
     assign exe_bus.busy_branch   = 0;
     assign exe_bus.branch_rob_id = issue_instruction_branch.rob_id;
-    assign exe_bus.branch_valid  = issue_branch_valid;
+    assign exe_bus.branch_valid  = issue_instruction_branch.valid;
     assign exe_bus.rd_phy_branch  = issue_instruction_branch.rd_phy;
 
     assign branch_prf_bus.rs1_phy = issue_instruction_branch.rs1_phy;
     assign branch_prf_bus.rs2_phy = issue_instruction_branch.rs2_phy;
-    assign branch_prf_bus.valid   = issue_branch_valid;
+    assign branch_prf_bus.valid   = issue_instruction_branch.valid;
 
     BranchUnit #(ADDR_WIDTH, DATA_WIDTH) branchUnit(
         .instruction_addr(issue_instruction_branch.addr),

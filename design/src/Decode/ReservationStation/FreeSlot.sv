@@ -10,23 +10,24 @@ module FreeSlot #(parameter NUM_RS_ENTRIES = 8, TYPE = 0)(
     input logic valid_1,
     output logic [$clog2(NUM_RS_ENTRIES)-1:0] free_0,           // physical register address to allocate
     output logic [$clog2(NUM_RS_ENTRIES)-1:0] free_1,           // physical register address to allocate
-    input logic  issue_free_valid,
-    input logic [$clog2(NUM_RS_ENTRIES):0] issue_free
+    input logic  return_slot_valid,
+    input logic [$clog2(NUM_RS_ENTRIES)-1:0] return_slot
 );
 
     logic [$clog2(NUM_RS_ENTRIES)-1:0] FREESLOT [0:NUM_RS_ENTRIES-1]; 
     logic [$clog2(NUM_RS_ENTRIES)-1:0] head;                         // points to the next free entry
     logic [$clog2(NUM_RS_ENTRIES)-1:0] tail;                         // points to the next allocated entry
     logic [$clog2(NUM_RS_ENTRIES):0] num_free;                     // number of free entries
-    logic [$clog2(NUM_RS_ENTRIES):0] num_free_reg;
+    logic [$clog2(NUM_RS_ENTRIES):0] num_free_tmp;
     integer i;
 
     always_comb begin
-        if(rst || flush) num_free = NUM_RS_ENTRIES;
+        if(rst || flush) num_free_tmp = NUM_RS_ENTRIES;
         else begin
-            num_free = num_free_reg;
-            if(valid_0 && valid_1) num_free = num_free - 2;
-            else if(valid_0 || valid_1) num_free = num_free - 1;
+            num_free_tmp = num_free;
+            if(return_slot_valid) num_free_tmp = num_free_tmp + 1;
+            if(valid_0 && valid_1) num_free_tmp = num_free_tmp - 2;
+            else if(valid_0 || valid_1) num_free_tmp = num_free_tmp - 1;
         end
     end
 
@@ -36,18 +37,18 @@ module FreeSlot #(parameter NUM_RS_ENTRIES = 8, TYPE = 0)(
             for (i = 0; i < NUM_RS_ENTRIES; i = i + 1) begin 
                 FREESLOT[i] <= i; 
             end
-            head         <= 0;
-            tail         <= NUM_RS_ENTRIES - 1;
-            num_free_reg <= num_free;
+            head     <= 0;
+            tail     <= NUM_RS_ENTRIES - 1;
+            num_free <= num_free_tmp;
         end
         else if(flush) begin
             // On flush, reset head and tail pointers
             for (i = 0; i < NUM_RS_ENTRIES; i = i + 1) begin 
                 FREESLOT[i] <= i; 
             end
-            head         <= 0;
-            tail         <= NUM_RS_ENTRIES - 1;
-            num_free_reg <= num_free;
+            head     <= 0;
+            tail     <= NUM_RS_ENTRIES - 1;
+            num_free <= num_free_tmp;
         end
         else begin
             // Allocate physical registers for renaming
@@ -63,9 +64,9 @@ module FreeSlot #(parameter NUM_RS_ENTRIES = 8, TYPE = 0)(
             else begin
                 head     <= head;
             end
-
-            if(issue_free_valid) begin
-                FREESLOT[tail + 1] <= issue_free; // -1 to skip PHY_ZERO
+            num_free <= num_free_tmp;
+            if(return_slot_valid) begin
+                FREESLOT[tail + 1] <= return_slot; // -1 to skip PHY_ZERO
                 tail               <= tail + 1;
             end
         end

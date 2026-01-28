@@ -17,9 +17,6 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, P
     output RS_ENTRY_t issue_instruction_alu,
     output RS_ENTRY_t issue_instruction_ls,
     output RS_ENTRY_t issue_instruction_branch,
-    output logic issue_alu_valid,
-    output logic issue_ls_valid,
-    output logic issue_branch_valid,
     // issue --> dispatch
     input logic busy_alu,
     input logic busy_lsu,
@@ -78,7 +75,6 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, P
         .dispatch_instruction_1(rename_instruction_1),
         .dispatch_valid_1(dispatch_alu_valid_1),
         .issue_instruction(issue_instruction_alu),
-        .issue_valid(issue_alu_valid),
         .busy(busy_alu)
     );
 
@@ -93,7 +89,6 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, P
         .dispatch_instruction_1(rename_instruction_1),
         .dispatch_valid_1(dispatch_ls_valid_1),
         .issue_instruction(issue_instruction_ls),
-        .issue_valid(issue_ls_valid),
         .busy(busy_lsu)
     );
 
@@ -108,7 +103,6 @@ module Dispatch #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_REGS = 64, P
         .dispatch_instruction_1(rename_instruction_1),
         .dispatch_valid_1(dispatch_branch_valid_1),
         .issue_instruction(issue_instruction_branch),
-        .issue_valid(issue_branch_valid),
         .busy(busy_branch)
     );
 

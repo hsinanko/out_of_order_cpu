@@ -65,23 +65,11 @@ module CPU #(parameter ADDR_WIDTH = 32,
     logic [ADDR_WIDTH-1:0]pc;
     logic pc_valid;
 
-    logic [ADDR_WIDTH-1:0]instruction_addr_0, instruction_addr_1;
-    logic [DATA_WIDTH-1:0]instruction_0, instruction_1;
-    logic [1:0] instruction_valid;
+    fetch_t instruction_0, instruction_1;
+    fetch_t instruction_0_reg, instruction_1_reg;
 
-    logic predict_taken_0;
-    logic predict_taken_1;
-    logic [ADDR_WIDTH-1:0] predict_target_0;
-    logic [ADDR_WIDTH-1:0] predict_target_1;
-
-    logic [ADDR_WIDTH-1:0]instruction_addr_0_reg, instruction_addr_1_reg;
-    logic [DATA_WIDTH-1:0]instruction_0_reg, instruction_1_reg;
-    logic [1:0] instruction_valid_reg;
-
-    logic predict_taken_0_reg;
-    logic [ADDR_WIDTH-1:0] predict_target_0_reg;
-    logic predict_taken_1_reg;
-    logic [ADDR_WIDTH-1:0] predict_target_1_reg;
+    predict_t predict_0, predict_1;
+    predict_t predict_0_reg, predict_1_reg;
 
     // ============= Decode / Rename Stage ==============
     rename_if #( ARCH_REGS, PHY_WIDTH) rename_0();
@@ -96,10 +84,8 @@ module CPU #(parameter ADDR_WIDTH = 32,
     logic [PHY_REGS-1:0] rd_phy_busy_0, rd_phy_busy_1;
 
     RS_ENTRY_t issue_instruction_alu, issue_instruction_ls, issue_instruction_branch;
-    logic issue_alu_valid, issue_ls_valid, issue_branch_valid;
 
     RS_ENTRY_t issue_instruction_alu_reg, issue_instruction_ls_reg, issue_instruction_branch_reg;
-    logic issue_alu_valid_reg, issue_ls_valid_reg, issue_branch_valid_reg;
 
     // ============ Issue / Execution Stage ==================
     execution_if #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH)exe_bus();
@@ -151,13 +137,9 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .clk(clk),
         .rst(rst),
         .pc(pc),
-        .predict_taken_0(predict_taken_0),
-        .predict_target_0(predict_target_0),
-        .instruction_addr_0(instruction_addr_0),
-        .instruction_addr_1(instruction_addr_1),
+        .predict_0(predict_0),
         .instruction_0(instruction_0),
         .instruction_1(instruction_1),
-        .instruction_valid(instruction_valid),
         .mem_write_en(mem_write_en),
         .waddr(mem_waddr),
         .wdata(mem_wdata),
@@ -172,60 +154,39 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .rst(rst),
         .pc(pc),
         .pc_valid(pc_valid),
-        .predict_taken_0(predict_taken_0),
-        .predict_target_0(predict_target_0),
-        .predict_taken_1(predict_taken_1),
-        .predict_target_1(predict_target_1),
+        .predict_0(predict_0),
+        .predict_1(predict_1),
         .retire_branch_bus(retire_bus_reg.retire_branch_sink)
     );
 
     always_ff @(posedge clk or posedge rst)begin
         if (rst) begin
             pc                     <= boot_pc;
-            instruction_addr_0_reg <= 0;
-            instruction_addr_1_reg <= 4;
-            instruction_0_reg      <= '0;
-            instruction_1_reg      <= '0;
-            predict_taken_0_reg    <= 'h0;
-            predict_target_0_reg   <= 'h0;
-            predict_taken_1_reg    <= 'h0;
-            predict_target_1_reg   <= 'h0;
+            instruction_0_reg      <= '{0, 0, 0};
+            instruction_1_reg      <= '{0, 0, 0};
+            predict_0_reg          <= '{0, 0};
+            predict_1_reg          <= '{0, 0};
         end
         else if(flush)begin
             pc                     <= redirect_pc;
-            instruction_addr_0_reg <= 'h0;
-            instruction_addr_1_reg <= 'h0;
-            instruction_0_reg      <= '0;
-            instruction_1_reg      <= '0;
-            instruction_valid_reg  <= '0;
-            predict_taken_0_reg    <= 'h0;
-            predict_target_0_reg   <= 'h0;
-            predict_taken_1_reg    <= 'h0;
-            predict_target_1_reg   <= 'h0;
+            instruction_0_reg      <= '{0, 0, 0};
+            instruction_1_reg      <= '{0, 0, 0};
+            predict_0_reg          <= '{0, 0};
+            predict_1_reg          <= '{0, 0};
         end
         else if(stall_fetch)begin
             pc                     <= pc;
-            instruction_addr_0_reg <= instruction_addr_0_reg;
-            instruction_addr_1_reg <= instruction_addr_1_reg;
             instruction_0_reg      <= instruction_0_reg;
             instruction_1_reg      <= instruction_1_reg;
-            instruction_valid_reg  <= instruction_valid_reg;
-            predict_taken_0_reg    <= predict_taken_0_reg;
-            predict_target_0_reg   <= predict_target_0_reg;
-            predict_taken_1_reg    <= predict_taken_1_reg;
-            predict_target_1_reg   <= predict_target_1_reg;
+            predict_0_reg          <= predict_0_reg;
+            predict_1_reg          <= predict_1_reg;
         end
         else begin
-            pc                     <= predict_target_1;
-            instruction_addr_0_reg <= instruction_addr_0;
-            instruction_addr_1_reg <= instruction_addr_1;
+            pc                     <= predict_1.predict_target;
             instruction_0_reg      <= instruction_0;
             instruction_1_reg      <= instruction_1;
-            instruction_valid_reg  <= instruction_valid;
-            predict_taken_0_reg    <= predict_taken_0;
-            predict_target_0_reg   <= predict_target_0;
-            predict_taken_1_reg    <= predict_taken_1;
-            predict_target_1_reg   <= predict_target_1;
+            predict_0_reg          <= predict_0;
+            predict_1_reg          <= predict_1;
         end
     end
 
@@ -241,15 +202,10 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .PRF_valid(PRF_valid),
         .stall_dispatch(stall_dispatch),
         //======== Instruction Fetch =============================
-        .instruction_valid(instruction_valid_reg),
-        .instruction_addr_0(instruction_addr_0_reg),
         .instruction_0(instruction_0_reg),
-        .instruction_addr_1(instruction_addr_1_reg),
         .instruction_1(instruction_1_reg),
-        .predict_taken_0(predict_taken_0_reg),
-        .predict_target_0(predict_target_0_reg),
-        .predict_taken_1(predict_taken_1_reg),
-        .predict_target_1(predict_target_1_reg),
+        .predict_0(predict_0_reg),
+        .predict_1(predict_1_reg),
         //======== Front RAT =============================
         .rat_0_bus(rename_0.rat_source),
         .rat_1_bus(rename_1.rat_source),
@@ -269,9 +225,6 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .issue_instruction_alu(issue_instruction_alu),
         .issue_instruction_ls(issue_instruction_ls),
         .issue_instruction_branch(issue_instruction_branch),
-        .issue_alu_valid(issue_alu_valid),
-        .issue_ls_valid(issue_ls_valid),
-        .issue_branch_valid(issue_branch_valid),
         .busy_alu(busy_alu),
         .busy_lsu(busy_lsu),
         .busy_branch(busy_branch)
@@ -283,17 +236,16 @@ module CPU #(parameter ADDR_WIDTH = 32,
             issue_instruction_alu_reg    <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
             issue_instruction_ls_reg     <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
             issue_instruction_branch_reg <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-            issue_alu_valid_reg          <= 1'b0;
-            issue_ls_valid_reg           <= 1'b0;
-            issue_branch_valid_reg       <= 1'b0;
+        end
+        else if(flush)begin
+            issue_instruction_alu_reg    <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            issue_instruction_ls_reg     <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            issue_instruction_branch_reg <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         end
         else begin
             issue_instruction_alu_reg    <= issue_instruction_alu;
             issue_instruction_ls_reg     <= issue_instruction_ls;
             issue_instruction_branch_reg <= issue_instruction_branch;
-            issue_alu_valid_reg          <= issue_alu_valid;
-            issue_ls_valid_reg           <= issue_ls_valid;
-            issue_branch_valid_reg       <= issue_branch_valid;
         end
     end
 
@@ -308,9 +260,6 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .issue_instruction_alu(issue_instruction_alu_reg),
         .issue_instruction_ls(issue_instruction_ls_reg),
         .issue_instruction_branch(issue_instruction_branch_reg),
-        .issue_alu_valid(issue_alu_valid_reg),
-        .issue_ls_valid(issue_ls_valid_reg),
-        .issue_branch_valid(issue_branch_valid_reg),
         // to execution
         .alu_prf_bus(alu_prf_bus.source),
         .lsu_prf_bus(lsu_prf_bus.source),
@@ -541,7 +490,6 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .rob_id_1(rob_id_1),
         .wb_to_rob_bus(wb_bus_reg.sink),
         // outputs to backend/architectural state
-        // rob_status outputs (used in retire stage)
         .rob_finish(ROB_FINISH),
         .rob(ROB),
         .rob_head(rob_head),
@@ -562,6 +510,23 @@ module CPU #(parameter ADDR_WIDTH = 32,
     
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
+            retire_bus_reg.isFlush             <= 1'b0;
+            retire_bus_reg.targetPC            <= 'h0;
+            retire_bus_reg.rd_arch             <= 'h0;
+            retire_bus_reg.rd_phy_old          <= 'h0;
+            retire_bus_reg.rd_phy_new          <= 'h0;
+            retire_bus_reg.update_btb_pc       <= 'h0;
+            retire_bus_reg.update_btb_taken    <= 1'b0;
+            retire_bus_reg.update_btb_target   <= 'h0;
+            retire_bus_reg.retire_pr_valid     <= 1'b0;
+            retire_bus_reg.retire_store_valid  <= 1'b0;
+            retire_bus_reg.retire_store_id     <= 'h0;
+            retire_bus_reg.retire_branch_valid <= 1'b0;
+            retire_bus_reg.retire_done_valid   <= 1'b0;
+            retire_bus_reg.rob_debug           <= 'h0;
+            retire_bus_reg.retire_addr         <= 'h0;
+        end
+        else if(flush)begin
             retire_bus_reg.isFlush             <= 1'b0;
             retire_bus_reg.targetPC            <= 'h0;
             retire_bus_reg.rd_arch             <= 'h0;

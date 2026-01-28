@@ -4,13 +4,9 @@ module Memory #(parameter INSTR_ADDRESS = 32'h0000_0000, DATA_ADDRESS = 32'h0000
     input  logic clk,
     input  logic rst,
     input  logic [ADDR_WIDTH-1:0] pc,           // Address input
-    input  logic                  predict_taken_0, // Branch prediction signal
-    input  logic [ADDR_WIDTH-1:0] predict_target_0,
-    output logic [ADDR_WIDTH-1:0] instruction_addr_0,    // instruction address 0
-    output logic [ADDR_WIDTH-1:0] instruction_addr_1,    // instruction address 1
-    output logic [DATA_WIDTH-1:0] instruction_0,   // Fetched Instruction
-    output logic [DATA_WIDTH-1:0] instruction_1,
-    output logic [1:0]            instruction_valid,
+    input  predict_t              predict_0,      // Prediction from BTB
+    output fetch_t                instruction_0,   // Fetched Instruction
+    output fetch_t                instruction_1,
     // data memory interface
     input  logic mem_write_en,
     input  logic [ADDR_WIDTH-1:0] waddr,
@@ -37,13 +33,9 @@ module Memory #(parameter INSTR_ADDRESS = 32'h0000_0000, DATA_ADDRESS = 32'h0000
     InstructionROM #(ADDR_WIDTH, DATA_WIDTH, INSTR_MEM_SIZE) instr_rom (
         .instr_data(instr_data),
         .addr(pc),
-        .predict_taken_0(predict_taken_0),
-        .predict_target_0(predict_target_0),
-        .instruction_addr_0(instruction_addr_0),
-        .instruction_addr_1(instruction_addr_1),
+        .predict_0(predict_0),
         .instruction_0(instruction_0),
-        .instruction_1(instruction_1),
-        .instruction_valid(instruction_valid)
+        .instruction_1(instruction_1)
     );
 
     DataMemory #(DATA_WIDTH, ADDR_WIDTH, DATA_MEM_SIZE) data_mem (

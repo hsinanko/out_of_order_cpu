@@ -17,7 +17,6 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_RE
     input logic dispatch_valid_1,
     // RS --> issue
     output RS_ENTRY_t issue_instruction,
-    output logic issue_valid,
     input logic busy
 );
 
@@ -27,11 +26,13 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_RE
     logic [$clog2(NUM_RS_ENTRIES)-1:0]tail;
     logic [$clog2(NUM_RS_ENTRIES):0]num_free;
     logic [31:0]global_age;
-    logic issue_free_valid;
-    logic [$clog2(NUM_RS_ENTRIES)-1:0]issue_free;
+
+
     integer i;
     // Find free slot for dispatching instructions
     logic [$clog2(NUM_RS_ENTRIES)-1:0]free_slot_0, free_slot_1;
+    logic return_slot_valid;
+    logic [$clog2(NUM_RS_ENTRIES)-1:0]return_slot;
     FreeSlot #(NUM_RS_ENTRIES, TYPE) free_slot_inst (
         .clk(clk),
         .rst(rst),
@@ -40,12 +41,22 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_RE
         .valid_1(dispatch_valid_1),
         .free_0(free_slot_0),
         .free_1(free_slot_1),
-        .issue_free_valid(issue_free_valid),
-        .issue_free(issue_free)
+        .return_slot_valid(return_slot_valid),
+        .return_slot(return_slot)
     );
 
-    logic [$clog2(NUM_RS_ENTRIES):0] best;
-    logic [$clog2(NUM_RS_ENTRIES):0] invalid_index = 1'b1 << $clog2(NUM_RS_ENTRIES);
+
+    logic [$clog2(NUM_RS_ENTRIES)-1:0] best;
+    logic best_valid;
+
+    // Find the youngest ready instruction
+    Search #(NUM_RS_ENTRIES) search_inst (
+        .RS(RS),
+        .PRF_valid(PRF_valid),
+        .best(best),
+        .best_valid(best_valid)
+    );
+
 
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
@@ -68,6 +79,10 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_RE
             // Do nothing on stall
             num_free    <= num_free;
             global_age  <= global_age;
+
+            if(best_valid && RS[best].valid) begin
+                RS[best].valid <= 1'b0; // Mark the issued instruction as invalid
+            end
         end
         else begin
             // Dispatch first instruction
@@ -100,11 +115,14 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_RE
                 RS[free_slot_1].predict_taken  <= dispatch_instruction_1.predict_taken;  // this should not happen in BRU
                 RS[free_slot_1].predict_target <= dispatch_instruction_1.predict_target; // this should not happen in BRU
                 RS[free_slot_1].rob_id         <= dispatch_instruction_1.rob_id;
-                RS[free_slot_1].valid          <= 1'b1;
+                RS[free_slot_1].valid          <= dispatch_instruction_1.valid;
                 RS[free_slot_1].age            <= (dispatch_valid_0) ? global_age+1: global_age;
             end
 
-            
+            if(best_valid && RS[best].valid) begin
+                RS[best].valid <= 1'b0; // Mark the issued instruction as invalid
+            end
+   
             if(dispatch_valid_0 && dispatch_valid_1)
                 global_age <= global_age + 3;
             if(dispatch_valid_0 || dispatch_valid_1)
@@ -114,106 +132,30 @@ module ReservationStation #(parameter NUM_RS_ENTRIES = 16, ROB_WIDTH = 4, PHY_RE
         end
     end
 
-    
-    always@(posedge clk or posedge rst)begin
-        if(!rst) begin
-            best <= find_best();
-        end
-    end
-
-    logic [$clog2(NUM_RS_ENTRIES):0] best_reg;
-    always_latch begin
+    always_comb begin
         if(flush) begin
             issue_instruction = '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-            issue_valid       = 1'b0;
-            issue_free_valid  = 1'b0;
-            issue_free        = 'hx;
+            return_slot_valid = 1'b0;
+            return_slot       = 'hx;
         end
         else if(busy) begin
-            issue_valid       = 1'b0;
-            issue_free_valid  = 1'b0;
-            issue_free        = 'hx;
-            issue_free_valid  = 1'b0;
-            issue_free        = 'hx;
+            issue_instruction = '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            return_slot_valid = 1'b0;
+            return_slot       = 'hx;
         end
-        else if(best != invalid_index)begin
+        else if(best_valid)begin
             issue_instruction = RS[best];
-            issue_valid       = 1'b1;
-            issue_free        = 0;
-            issue_free_valid  = 1'b1;
-            issue_free        = best;
-            RS[best].valid    = 1'b0;
+            return_slot_valid = 1'b1;
+            return_slot       = best;
         end
         else begin
             issue_instruction = '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-            issue_valid       = 1'b0;
-            issue_free_valid  = 1'b0;
-            issue_free        = 'hx;
-            issue_free_valid  = 1'b0;
-            issue_free        = 'hx;
+            return_slot_valid = 1'b0;
+            return_slot       = 'hx;
         end
     end
-    // Find the youngest ready instruction
 
-    function [$clog2(NUM_RS_ENTRIES):0] find_best();
-    integer i;
-    begin
-        best = invalid_index; // Initialize to invalid index
-        for (i = 0; i < NUM_RS_ENTRIES; i = i + 1) begin
-            if(RS[i].valid)begin
-                case(RS[i].opcode)
-                    LOAD, STORE:begin
-                        if ((best == invalid_index) || RS[i].age < RS[best].age)
-                            best = i;
-                    end
-                    BRANCH: begin
-                        if (PRF_valid[RS[i].rs1_phy] && PRF_valid[RS[i].rs2_phy]) begin
-                            if ((best == invalid_index) || RS[i].age < RS[best].age)
-                                best = i;
-                        end
-                    end
-                    JAL, LUI, AUIPC: begin
-                        if ((best == invalid_index) || RS[i].age < RS[best].age)
-                            best = i;
-                    end
-                    OP_IMM, JALR: begin
-                        if (PRF_valid[RS[i].rs1_phy]) begin
-                            if ((best == invalid_index) || RS[i].age < RS[best].age)
-                                best = i;
-                        end
-                    end
-                    OP: begin
-                        if (PRF_valid[RS[i].rs1_phy] && PRF_valid[RS[i].rs2_phy]) begin
-                            if ((best == invalid_index) || RS[i].age < RS[best].age)
-                                best = i;
-                        end
-                    end
-                    SYSTEM: begin
-                        if ((best == invalid_index) || RS[i].age < RS[best].age)
-                            best = i;
-                    end
-                    default: begin
-                        // Do nothing for unrecognized opcodes
-                    end
 
-                endcase
-            end
-        end
-
-        if(RS[best].opcode == LOAD) begin
-            if (!PRF_valid[RS[best].rs1_phy]) begin
-                best = invalid_index;
-            end
-        end
-        else if(RS[best].opcode == STORE) begin
-            if (!(PRF_valid[RS[best].rs1_phy] && PRF_valid[RS[best].rs2_phy])) begin
-                best = invalid_index;
-            end
-        end
-
-        return best;
-    end
-    endfunction
     // For debugging: dump Reservation Station contents at each clock cycle
     integer           mcd;
 

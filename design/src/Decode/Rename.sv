@@ -9,18 +9,12 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
     //====== Physical Register File =================
     input  logic [PHY_REGS-1:0]   PRF_valid,
     //====== Instruction Decode ===================
-    input  logic [1:0]instruction_valid,
     // first instruction
-    input  logic [ADDR_WIDTH-1:0] instruction_addr_0,   // instruction address from IF
-    input  logic [DATA_WIDTH-1:0] instruction_0,        // instruction from IF
-    // second instruction
-    input  logic [ADDR_WIDTH-1:0] instruction_addr_1,   // instruction address from IF
-    input  logic [DATA_WIDTH-1:0] instruction_1,
+    input  fetch_t instruction_0,   // instruction address from IF
+    input  fetch_t instruction_1,
     // prediction branch
-    input  logic predict_taken_0,
-    input  logic [ADDR_WIDTH-1:0] predict_target_0,
-    input  logic predict_taken_1,
-    input  logic [ADDR_WIDTH-1:0] predict_target_1,
+    input predict_t predict_0,
+    input predict_t predict_1,
     //======== Front RAT =============================
     rename_if.rat_source rat_0_bus,
     rename_if.rat_source rat_1_bus,
@@ -43,9 +37,6 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
     output RS_ENTRY_t issue_instruction_alu,
     output RS_ENTRY_t issue_instruction_ls,
     output RS_ENTRY_t issue_instruction_branch,
-    output logic issue_alu_valid,
-    output logic issue_ls_valid,
-    output logic issue_branch_valid,
     input logic busy_alu,
     input logic busy_lsu,
     input logic busy_branch
@@ -55,13 +46,11 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
     instruction_t instr_0, instr_1;
 
     InstructionDecode #(ADDR_WIDTH, DATA_WIDTH) Decode_0 (
-        .instruction_addr(instruction_addr_0),
         .instruction(instruction_0),
         .decoded_instruction(instr_0)
     );
 
     InstructionDecode #(ADDR_WIDTH, DATA_WIDTH) Decode_1 (
-        .instruction_addr(instruction_addr_1),
         .instruction(instruction_1),
         .decoded_instruction(instr_1)
     );
@@ -90,8 +79,8 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
             rat_1_bus.valid = 1'b0;
         end
         else begin
-            rat_0_bus.valid = (instruction_valid[0] && isRename_0);
-            rat_1_bus.valid = (instruction_valid[1] && isRename_1);
+            rat_0_bus.valid = (instr_0.valid && isRename_0);
+            rat_1_bus.valid = (instr_1.valid && isRename_1);
         end
     end
 
@@ -103,8 +92,8 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
             freelist_1_bus.valid = 1'b0;
         end
         else begin
-            freelist_0_bus.valid = (instruction_valid[0] && isRename_0);
-            freelist_1_bus.valid = (instruction_valid[1] && isRename_1);
+            freelist_0_bus.valid = (instr_0.valid && isRename_0);
+            freelist_1_bus.valid = (instr_1.valid && isRename_1);
         end
     end
 
@@ -118,8 +107,8 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
             busy_valid = 2'b00;
         end
         else begin
-            busy_valid[0] = (instruction_valid[0] && isRename_0);
-            busy_valid[1] = (instruction_valid[1] && isRename_1);
+            busy_valid[0] = (instr_0.valid && isRename_0);
+            busy_valid[1] = (instr_1.valid && isRename_1);
         end
     end
     assign rd_phy_busy_0 = (busy_valid[0]) ? freelist_0_bus.rd_phy_new : 'h0;
@@ -137,7 +126,7 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
     assign rob_entry_0.actual_taken  = 1'b0;
     assign rob_entry_0.update_pc     = 'h0;
     assign rob_entry_0.mispredict    = 1'b0;
-    assign rob_entry_0.valid         = (flush || stall_dispatch) ? 1'b0 : instruction_valid[0];
+    assign rob_entry_0.valid         = (flush || stall_dispatch) ? 1'b0 : instr_0.valid;
     // debugging info
     assign rob_entry_0.addr          = instr_0.addr;
     //========== Second instruction =================
@@ -149,7 +138,7 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
     assign rob_entry_1.actual_taken  = 1'b0;
     assign rob_entry_1.update_pc     = 'h0;
     assign rob_entry_1.mispredict    = 1'b0;
-    assign rob_entry_1.valid         = (flush || stall_dispatch) ? 1'b0 : instruction_valid[1];
+    assign rob_entry_1.valid         = (flush || stall_dispatch) ? 1'b0 : instr_1.valid;
     // debugging info
     assign rob_entry_1.addr = instr_1.addr;
     // ============= Decode / Dispatch Stage ==============
@@ -164,10 +153,10 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
     assign rename_instruction_0.rs1_addr       = rat_0_bus.rs1_phy;
     assign rename_instruction_0.rs2_addr       = rat_0_bus.rs2_phy;
     assign rename_instruction_0.rd_addr        = freelist_0_bus.rd_phy_new;
-    assign rename_instruction_0.predict_taken  = predict_taken_0;
-    assign rename_instruction_0.predict_target = predict_target_0;
+    assign rename_instruction_0.predict_taken  = predict_0.predict_taken;
+    assign rename_instruction_0.predict_target = predict_0.predict_target;
     assign rename_instruction_0.rob_id         = rob_id_0;
-    assign rename_instruction_0.valid          = (flush || stall_dispatch) ? 1'b0 : instruction_valid[0];
+    assign rename_instruction_0.valid          = (flush || stall_dispatch) ? 1'b0 : instr_0.valid;
             // instruction 1
     assign rename_instruction_1.addr           = instr_1.addr;
     assign rename_instruction_1.opcode         = instr_1.opcode;
@@ -177,10 +166,10 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
     assign rename_instruction_1.rs1_addr       = rat_1_bus.rs1_phy;
     assign rename_instruction_1.rs2_addr       = rat_1_bus.rs2_phy;
     assign rename_instruction_1.rd_addr        = freelist_1_bus.rd_phy_new;
-    assign rename_instruction_1.predict_taken  = predict_taken_1;
-    assign rename_instruction_1.predict_target = predict_target_1;
+    assign rename_instruction_1.predict_taken  = predict_1.predict_taken;
+    assign rename_instruction_1.predict_target = predict_1.predict_target;
     assign rename_instruction_1.rob_id         = rob_id_1;
-    assign rename_instruction_1.valid          = (flush || stall_dispatch) ? 1'b0 : instruction_valid[1];
+    assign rename_instruction_1.valid          = (flush || stall_dispatch) ? 1'b0 : instr_1.valid;
 
 
     Dispatch #(NUM_RS_ENTRIES, ROB_WIDTH, PHY_REGS, PHY_WIDTH) Dispatch_Unit(
@@ -195,9 +184,6 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
         .issue_instruction_alu(issue_instruction_alu),
         .issue_instruction_ls(issue_instruction_ls),
         .issue_instruction_branch(issue_instruction_branch),
-        .issue_alu_valid(issue_alu_valid),
-        .issue_ls_valid(issue_ls_valid),
-        .issue_branch_valid(issue_branch_valid),
         .busy_alu(busy_alu),
         .busy_lsu(busy_lsu),
         .busy_branch(busy_branch)
