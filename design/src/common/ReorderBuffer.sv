@@ -17,11 +17,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     // commit 
     writeback_if.sink wb_to_rob_bus,
     // ROB status
-    output logic [NUM_ROB_ENTRY-1:0]       rob_finish,
-    output ROB_ENTRY_t rob[NUM_ROB_ENTRY-1:0],
-    output logic [NUM_ROB_ENTRY-1:0]       rob_head,
-    output logic                           rob_full,
-    output logic                           rob_empty
+    output ROB_status_t rob_status
     // debugging interface
 );
 
@@ -36,11 +32,12 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     assign rob_id_1 = (rob_entry_1.valid) ? ((rob_entry_0.valid) ? tail + 4'd1 : tail) : {ROB_WIDTH{1'b0}};
     integer i;
 
-    assign rob_finish = ROB_FINISH;
-    assign rob = ROB;
-    assign rob_head = head;
-    assign rob_full = (count >= NUM_ROB_ENTRY-2);
-    assign rob_empty = (count == 0);
+    assign rob_status.rob_finish = ROB_FINISH;
+    assign rob_status.rob = ROB;
+    assign rob_status.rob_head = head;
+    assign rob_status.rob_full = (count >= NUM_ROB_ENTRY-2);
+    assign rob_status.rob_empty = (count == 0);
+    
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
             for(i = 0; i < NUM_ROB_ENTRY; i = i + 1)begin

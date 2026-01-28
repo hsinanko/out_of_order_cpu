@@ -55,6 +55,14 @@ package typedef_pkg;
     } ROB_ENTRY_t;
 
     typedef struct{
+        logic [NUM_ROB_ENTRY-1:0]       rob_finish;
+        ROB_ENTRY_t rob[NUM_ROB_ENTRY-1:0];
+        logic [NUM_ROB_ENTRY-1:0]       rob_head;
+        logic                           rob_full;
+        logic                           rob_empty;
+    } ROB_status_t;
+
+    typedef struct{
         logic [ADDR_WIDTH-1:0] addr;
         logic [6:0] opcode;
         logic [6:0] funct7;
@@ -86,6 +94,18 @@ package typedef_pkg;
         logic [PHY_WIDTH-1:0]  rd_phy;
         logic valid;
     } LOAD_entry_t;
+
+
+    typedef struct {
+        logic [ADDR_WIDTH-1:0] retire_addr_reg;
+        logic retire_valid_reg;
+        logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out;
+        logic [PHY_REGS-1:0]PRF_busy_out;
+        logic [PHY_REGS-1:0]PRF_valid_out;
+        logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out;
+        logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat_out;
+        logic [ROB_WIDTH-1:0] retire_count;
+    }Debug_t;
 
 endpackage
 

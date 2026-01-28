@@ -1,16 +1,25 @@
 `timescale 1ns/1ps
 import typedef_pkg::*;
 module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 32, FIFO_DEPTH = 16)(
-    input  logic                  clk,
-    input  logic                  rst,
-    input  logic                 flush,
-    input  logic [NUM_ROB_ENTRY-1:0]       ROB_FINISH,
-    input  ROB_ENTRY_t ROB[NUM_ROB_ENTRY-1:0],
-    input  logic [ROB_WIDTH-1:0]  rob_head,
+    input  logic        clk,
+    input  logic        rst,
+    input  logic        flush,
+    input  ROB_status_t rob_status,
     retire_if.retire_source retire_bus
 );
 
+    logic [NUM_ROB_ENTRY-1:0] ROB_FINISH;
+    ROB_ENTRY_t ROB[NUM_ROB_ENTRY-1:0];
+    logic [ROB_WIDTH-1:0] rob_head;
+    logic [ROB_WIDTH-1:0] rob_full;
+    logic [ROB_WIDTH-1:0] rob_empty;
 
+
+    assign ROB_FINISH = rob_status.rob_finish;
+    assign ROB = rob_status.rob;
+    assign rob_head = rob_status.rob_head;
+    assign rob_full = rob_status.rob_full;
+    assign rob_empty = rob_status.rob_empty;
 
     logic isALU, isLoad, isStore, isBranch, isJump, isSystem;
     assign isALU = (ROB[rob_head].opcode == OP_IMM || ROB[rob_head].opcode == OP || ROB[rob_head].opcode == LUI || ROB[rob_head].opcode == AUIPC);

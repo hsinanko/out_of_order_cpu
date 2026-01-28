@@ -13,13 +13,7 @@ module IssueExecution_tb();
     logic [ADDR_WIDTH-1:0] boot_pc;
 
     logic done;
-    logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out;
-    logic [ADDR_WIDTH-1:0]retire_addr_reg;
-    logic retire_valid_reg;
-    logic [PHY_REGS-1:0]PRF_busy_out;
-    logic [PHY_REGS-1:0]PRF_valid_out;
-    logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out;
-    logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat_out; 
+    Debug_t debug_info;
 
     logic [PHY_WIDTH-1:0]front_rat[0:ARCH_REGS-1];
     logic [PHY_WIDTH-1:0]back_rat[0:ARCH_REGS-1];
@@ -43,13 +37,7 @@ module IssueExecution_tb();
         .rst(rst),
         .boot_pc(boot_pc),
         .done(done),
-        .retire_addr_reg(retire_addr_reg),
-        .retire_valid_reg(retire_valid_reg),
-        .PRF_data_out(PRF_data_out),
-        .PRF_busy_out(PRF_busy_out),
-        .PRF_valid_out(PRF_valid_out),
-        .front_rat_out(front_rat_out),
-        .back_rat_out(back_rat_out)
+        .debug_info(debug_info)
     );
 
 
@@ -73,12 +61,12 @@ module IssueExecution_tb();
     integer i, j;
     always_comb begin
         for(int i = 0; i < ARCH_REGS; i = i + 1) begin
-            front_rat[i] = front_rat_out[i*PHY_WIDTH +: PHY_WIDTH];
-            back_rat[i]  = back_rat_out[i*PHY_WIDTH +: PHY_WIDTH];
+            front_rat[i] = debug_info.front_rat_out[i*PHY_WIDTH +: PHY_WIDTH];
+            back_rat[i]  = debug_info.back_rat_out[i*PHY_WIDTH +: PHY_WIDTH];
         end
 
         for(int j = 0; j < PHY_REGS; j = j + 1) begin
-            prf[j] = PRF_data_out[j*DATA_WIDTH +: DATA_WIDTH];
+            prf[j] = debug_info.PRF_data_out[j*DATA_WIDTH +: DATA_WIDTH];
         end
 
     end
@@ -97,8 +85,8 @@ module IssueExecution_tb();
 
     always_ff @(posedge clk)begin
         if(!rst)begin
-            if(retire_valid_reg)
-                $display("Cycle: %5d Retired Address: 0x%08h", n_cycles, retire_addr_reg);
+            if(debug_info.retire_valid_reg)
+                $display("Cycle: %5d Retired Address: 0x%08h", n_cycles, debug_info.retire_addr_reg);
             else
                 $display("Cycle: %5d", n_cycles);
         end

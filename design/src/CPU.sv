@@ -22,13 +22,7 @@ module CPU #(parameter ADDR_WIDTH = 32,
     input logic [ADDR_WIDTH-1:0] boot_pc,
     output logic done,
     // === Debugging Interface ==================
-    output logic [ADDR_WIDTH-1:0] retire_addr_reg,
-    output logic retire_valid_reg,
-    output logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out,
-    output logic [PHY_REGS-1:0]PRF_busy_out,
-    output logic [PHY_REGS-1:0]PRF_valid_out,
-    output logic [PHY_WIDTH*ARCH_REGS-1:0]front_rat_out,
-    output logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat_out
+    output Debug_t debug_info
 );
 
     // ============= Flush Logic ===================
@@ -118,10 +112,7 @@ module CPU #(parameter ADDR_WIDTH = 32,
     logic [ADDR_WIDTH-1:0] mem_waddr;
     logic [DATA_WIDTH-1:0] mem_wdata;
     // ============ Reorder Buffer ==================
-    logic rob_full, rob_empty;
-    logic [NUM_ROB_ENTRY-1:0]       ROB_FINISH;
-    ROB_ENTRY_t ROB[NUM_ROB_ENTRY-1:0];
-    logic [ROB_WIDTH-1:0] rob_head;
+    ROB_status_t rob_status;
     // ============= Retire Stage ==================
     logic done_valid;
     retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus();
@@ -460,7 +451,7 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .freelist_1_bus(rename_1.freelist_sink),
         // BACK_RAT will handle commit updates
         .back_rat(back_rat),
-        .front_rat_out(front_rat_out)
+        .front_rat_out(debug_info.front_rat_out)
     );
 
     Freelist #(ARCH_REGS, PHY_REGS, PHY_WIDTH, FREE_REG) free_list(
@@ -490,20 +481,14 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .rob_id_1(rob_id_1),
         .wb_to_rob_bus(wb_bus_reg.sink),
         // outputs to backend/architectural state
-        .rob_finish(ROB_FINISH),
-        .rob(ROB),
-        .rob_head(rob_head),
-        .rob_full(rob_full),
-        .rob_empty(rob_empty)
+        .rob_status(rob_status)
     );
 
     Retire #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH) Retire_Unit(
         .clk(clk),
         .rst(rst),
         .flush(flush),
-        .ROB_FINISH(ROB_FINISH),
-        .ROB(ROB),
-        .rob_head(rob_head),
+        .rob_status(rob_status),
         .retire_bus(retire_bus.retire_source)
     );
 
@@ -574,8 +559,8 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .clk(clk),
         .rst(rst),
         .flush(flush),
-        .rob_full(rob_full),
-        .rob_empty(rob_empty),
+        .rob_full(rob_status.rob_full),
+        .rob_empty(rob_status.rob_empty),
         .pc_valid(pc_valid),
         .free_list_full(free_list_full),
         .free_list_empty(free_list_empty),
@@ -604,19 +589,21 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .retire_pr_bus(retire_bus_reg.retire_pr_sink),
         // ===========
         // outputs for debug
-        .PRF_data_out(PRF_data_out),
-        .PRF_busy_out(PRF_busy_out),
-        .PRF_valid_out(PRF_valid_out)
+        .PRF_data_out(debug_info.PRF_data_out),
+        .PRF_busy_out(debug_info.PRF_busy_out),
+        .PRF_valid_out(debug_info.PRF_valid_out)
     );
 
 
     // ============= Debugging ==================
-    assign back_rat_out = back_rat;
-
-    assign retire_addr_reg  = (flush) ? 'h0 : retire_bus_reg.retire_addr;
-    assign retire_valid_reg = (flush) ? 1'b0 : (retire_bus_reg.retire_pr_valid || retire_bus_reg.retire_store_valid || retire_bus_reg.retire_branch_valid);
     logic [ROB_WIDTH-1:0] retire_count;
+    
+    assign debug_info.back_rat_out = back_rat;
+    assign debug_info.retire_addr_reg  = (flush) ? 'h0 : retire_bus_reg.retire_addr;
+    assign debug_info.retire_valid_reg = (flush) ? 1'b0 : (retire_bus_reg.retire_pr_valid || retire_bus_reg.retire_store_valid || retire_bus_reg.retire_branch_valid);
+    assign debug_info.retire_count = retire_count;
 
+    
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
             retire_count <= '0;
