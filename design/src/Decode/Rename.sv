@@ -61,12 +61,10 @@ module Rename #(parameter ADDR_WIDTH =  32, DATA_WIDTH = 32, ARCH_REGS = 32, PHY
     assign rat_0_bus.rd_arch  = instr_0.rd_addr;
     assign rat_0_bus.rs1_arch = instr_0.rs1_addr;
     assign rat_0_bus.rs2_arch = instr_0.rs2_addr;
-    assign rat_0_bus.rd_arch  = instr_0.rd_addr;
     // second instruction
     assign rat_1_bus.rd_arch  = instr_1.rd_addr;
     assign rat_1_bus.rs1_arch = instr_1.rs1_addr;
     assign rat_1_bus.rs2_arch = instr_1.rs2_addr;
-    assign rat_1_bus.rd_arch  = instr_1.rd_addr;
 
 
     logic isRename_0, isRename_1;

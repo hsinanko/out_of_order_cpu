@@ -140,6 +140,12 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
                 mem_waddr    <= StoreQueue[retire_store_id_0].addr;
                 mem_wdata    <= StoreQueue[retire_store_id_0].data;
             end
+            else if(retire_store_valid_1) begin
+                StoreQueue[retire_store_id_1].valid <= 1'b0;
+                mem_write_en <= 1'b1;
+                mem_waddr    <= StoreQueue[retire_store_id_1].addr;
+                mem_wdata    <= StoreQueue[retire_store_id_1].data;
+            end
             else begin
                 mem_write_en <= 1'b0;
                 mem_waddr    <= 'h0;

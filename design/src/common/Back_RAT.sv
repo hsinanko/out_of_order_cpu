@@ -42,11 +42,24 @@ module Back_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
         end
         else if (!flush) begin
             if (retire_pr_valid_0) begin
-                BACK_RAT[rd_arch_0] <= rd_phy_new_0;
+                if(retire_pr_valid_1 && (rd_arch_0 == rd_arch_1)) begin
+                    // If both retire instructions write to the same architectural register,
+                    // the second instruction's physical register mapping takes precedence
+                    BACK_RAT[rd_arch_0] <= rd_phy_new_1;
+                end
+                else begin
+                    BACK_RAT[rd_arch_0] <= rd_phy_new_0;
+                end
             end
             else if (retire_pr_valid_1) begin
                 BACK_RAT[rd_arch_1] <= rd_phy_new_1;
             end
+            // if (retire_pr_valid_0) begin
+            //     BACK_RAT[rd_arch_0] <= rd_phy_new_0;
+            // end
+            // else if (retire_pr_valid_1) begin
+            //     BACK_RAT[rd_arch_1] <= rd_phy_new_1;
+            // end
         end
     end
 

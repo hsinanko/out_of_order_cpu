@@ -24,7 +24,7 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
 
     assign alu_prf_bus.rs1_phy = issue_instruction_alu.rs1_phy;
     assign alu_prf_bus.rs2_phy = issue_instruction_alu.rs2_phy;
-    assign alu_prf_bus.valid   = issue_instruction_alu.valid;
+    assign alu_prf_bus.valid   = (flush) ? 0 : issue_instruction_alu.valid;
 
     
     ALUControl alu_ctrl(
@@ -68,7 +68,7 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     
     assign lsu_prf_bus.rs1_phy = issue_instruction_ls.rs1_phy;
     assign lsu_prf_bus.rs2_phy = issue_instruction_ls.rs2_phy;
-    assign lsu_prf_bus.valid   = issue_instruction_ls.valid;
+    assign lsu_prf_bus.valid   = (flush) ? 0 : issue_instruction_ls.valid;
 
     assign rd_phy_ls  = issue_instruction_ls.rd_phy;
     assign funct3_ls = issue_instruction_ls.funct3;
@@ -111,7 +111,7 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
 
     assign branch_prf_bus.rs1_phy = issue_instruction_branch.rs1_phy;
     assign branch_prf_bus.rs2_phy = issue_instruction_branch.rs2_phy;
-    assign branch_prf_bus.valid   = issue_instruction_branch.valid;
+    assign branch_prf_bus.valid   = (flush) ? 0 : issue_instruction_branch.valid;
 
     BranchUnit #(ADDR_WIDTH, DATA_WIDTH) branchUnit(
         .instruction_addr(issue_instruction_branch.addr),

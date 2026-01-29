@@ -95,6 +95,10 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 32, 
             retire_bus_0.isFlush             = 'h0;
             retire_bus_0.targetPC            = 'h0;
             retire_bus_0.retire_done_valid   = 1'b0;
+
+            // debugging info
+            retire_bus_0.rob_debug   = 'h0;
+            retire_bus_0.retire_addr = {ADDR_WIDTH{1'bx}};
         end
         else if(ROB_FINISH[rob_head]) begin
             retire_bus_0.rob_debug   = rob_head;
@@ -246,7 +250,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 32, 
             retire_bus_0.retire_done_valid   = 1'b0;
             // debugging info
             retire_bus_0.rob_debug   = 'h0;
-            retire_bus_0.retire_addr = 'h0;
+            retire_bus_0.retire_addr = {ADDR_WIDTH{1'bx}};
         end
     end
 
@@ -272,6 +276,10 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 32, 
             retire_bus_1.isFlush             = 'h0;
             retire_bus_1.targetPC            = 'h0;
             retire_bus_1.retire_done_valid   = 1'b0;
+
+            // debugging info
+            retire_bus_0.rob_debug   = 'h0;
+            retire_bus_0.retire_addr = {ADDR_WIDTH{1'bx}};
         end
         else if(ROB_FINISH[rob_head] && ROB_FINISH[rob_head+1] && !retire_second_block) begin
             retire_bus_1.rob_debug   = rob_head + 1;
@@ -423,7 +431,7 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 32, 
 
             // debugging info
             retire_bus_1.rob_debug   = 'h0;
-            retire_bus_1.retire_addr = 'h0;
+            retire_bus_1.retire_addr = {ADDR_WIDTH{1'bx}};
         end
     end
 

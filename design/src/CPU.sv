@@ -292,31 +292,33 @@ module CPU #(parameter ADDR_WIDTH = 32,
             exe_bus_reg.isJump        <= 0;
             exe_bus_reg.mispredict    <= 0;
         end
-        // else if(flush)begin
-        //     // alu outputs
-        //     exe_bus_reg.alu_rob_id <= 0;
-        //     exe_bus_reg.alu_result <= 0;
-        //     exe_bus_reg.rd_phy_alu <= 0;
-        //     // Load/Store outputs
-        //     exe_bus_reg.store_waddr <= 0;
-        //     exe_bus_reg.store_wdata <= 0;
-        //     exe_bus_reg.store_rob_id <= 0;
-        //     exe_bus_reg.store_valid  <= 0;
-        //     exe_bus_reg.load_funct3  <= 0;
-        //     exe_bus_reg.load_valid   <= 0;
-        //     exe_bus_reg.load_raddr   <= 0;
-        //     exe_bus_reg.load_rob_id  <= 0;
-        //     exe_bus_reg.load_rd_phy  <= 0;
-        //     // Branch outputs
-        //     exe_bus_reg.branch_rob_id <= 0;
-        //     exe_bus_reg.actual_taken  <= 0;
-        //     exe_bus_reg.actual_target <= 0;
-        //     exe_bus_reg.nextPC        <= 0;
-        //     exe_bus_reg.update_pc     <= 0;
-        //     exe_bus_reg.rd_phy_branch <= 0;
-        //     exe_bus_reg.isJump        <= 0;
-        //     exe_bus_reg.mispredict    <= 0;
-        // end
+        else if(flush)begin
+            // alu outputs
+            exe_bus_reg.alu_rob_id   <= 0;
+            exe_bus_reg.alu_result   <= 0;
+            exe_bus_reg.rd_phy_alu   <= 0;
+            exe_bus_reg.alu_valid    <= 0;
+            // Load/Store outputs
+            exe_bus_reg.store_waddr  <= 0;
+            exe_bus_reg.store_wdata  <= 0;
+            exe_bus_reg.store_rob_id <= 0;
+            exe_bus_reg.store_valid  <= 0;
+            exe_bus_reg.load_funct3  <= 0;
+            exe_bus_reg.load_valid   <= 0;
+            exe_bus_reg.load_raddr   <= 0;
+            exe_bus_reg.load_rob_id  <= 0;
+            exe_bus_reg.load_rd_phy  <= 0;
+            // Branch outputs
+            exe_bus_reg.branch_valid  <= 0;
+            exe_bus_reg.branch_rob_id <= 0;
+            exe_bus_reg.actual_taken  <= 0;
+            exe_bus_reg.actual_target <= 0;
+            exe_bus_reg.nextPC        <= 0;
+            exe_bus_reg.update_pc     <= 0;
+            exe_bus_reg.rd_phy_branch <= 0;
+            exe_bus_reg.isJump        <= 0;
+            exe_bus_reg.mispredict    <= 0;
+        end
         else begin
             // alu outputs
             exe_bus_reg.alu_rob_id   <= exe_bus.alu_rob_id;
@@ -345,7 +347,6 @@ module CPU #(parameter ADDR_WIDTH = 32,
             exe_bus_reg.nextPC        <= exe_bus.nextPC;
             exe_bus_reg.rd_phy_branch <= exe_bus.rd_phy_branch;
             exe_bus_reg.isJump        <= exe_bus.isJump;
-
         end  
         
     end
@@ -629,7 +630,7 @@ module CPU #(parameter ADDR_WIDTH = 32,
     assign retire_store_1_debug  = retire_bus_1_reg.retire_store_sink.retire_store_pkg; 
 
     assign debug_info.back_rat_out = back_rat;
-    assign debug_info.retire_addr_0_reg  = (flush) ? 'h0 : retire_bus_0_reg.retire_addr;
+    assign debug_info.retire_addr_0_reg  = (flush) ? 'hx : retire_bus_0_reg.retire_addr;
     assign debug_info.retire_valid_0_reg = (flush) ? 1'b0 : (retire_pr_0_debug.retire_pr_valid || retire_store_0_debug.retire_store_valid || retire_branch_0_debug.retire_branch_valid);
     assign debug_info.retire_addr_1_reg  = (flush) ? 'h0 : retire_bus_1_reg.retire_addr;
     assign debug_info.retire_valid_1_reg = (flush) ? 1'b0 : (retire_pr_1_debug.retire_pr_valid || retire_store_1_debug.retire_store_valid || retire_branch_1_debug.retire_branch_valid);

@@ -62,6 +62,9 @@ VFLAGS = --binary \
 		 --trace \
 		 -Wall \
 		 -Wno-fatal \
+		 --x-assign 0 \
+		 --x-initial 0 \
+		 --trace-structs \
 		 -o  $(TB) \
 			 $(PKG) \
 			 $(INT) \

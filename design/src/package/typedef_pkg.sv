@@ -2,13 +2,13 @@
 package typedef_pkg;
     import parameter_pkg::*;
     
-    typedef struct{
+    typedef struct packed{
         logic [ADDR_WIDTH-1:0] addr;
         logic [DATA_WIDTH-1:0] data;
         logic valid;
     }fetch_t;
 
-    typedef struct{
+    typedef struct packed{
         logic predict_taken;
         logic [ADDR_WIDTH-1:0] predict_target;
     }predict_t;
@@ -23,7 +23,7 @@ package typedef_pkg;
     } BTB_ENTRY_t;
 
 
-    typedef struct{
+    typedef struct packed{
         logic [ADDR_WIDTH-1:0] addr;        // program counter
         logic [6:0] opcode;      // opcode field
         logic [6:0] funct7;      // funct7 field
@@ -38,7 +38,7 @@ package typedef_pkg;
         logic valid;
     }instruction_t;
 
-    typedef struct{
+    typedef struct packed{
         logic [4:0] rd_arch;
         logic [PHY_WIDTH-1:0] rd_phy_old;
         logic [PHY_WIDTH-1:0] rd_phy_new;
@@ -54,7 +54,7 @@ package typedef_pkg;
 
     } ROB_ENTRY_t;
 
-    typedef struct{
+    typedef struct packed{
         logic [ADDR_WIDTH-1:0] addr;
         logic [6:0] opcode;
         logic [6:0] funct7;
@@ -70,14 +70,14 @@ package typedef_pkg;
         logic [31:0] age;
     } RS_ENTRY_t;
 
-    typedef struct {
+    typedef struct packed{
         logic [31:0] age;
         logic [ADDR_WIDTH-1:0] addr;
         logic [DATA_WIDTH-1:0] data;
         logic valid;
     } STORE_entry_t;
 
-    typedef struct {
+    typedef struct packed{
         logic [31:0] age;
         logic [2:0] funct3;
         logic [ADDR_WIDTH-1:0] addr;
@@ -88,26 +88,26 @@ package typedef_pkg;
     } LOAD_entry_t;
 
 
-    typedef struct{
+    typedef struct packed{
         logic [4:0]            rd_arch;
         logic [PHY_WIDTH-1:0]  rd_phy_old;
         logic [PHY_WIDTH-1:0]  rd_phy_new;
         logic                  retire_pr_valid;
     }RETIRE_PR_t;
 
-    typedef struct{
+    typedef struct packed{
         logic                  retire_store_valid;
         logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id;
     }RETIRE_STORE_t;
 
-    typedef struct{
+    typedef struct packed{
         logic [ADDR_WIDTH-1:0] update_btb_pc;
         logic [ADDR_WIDTH-1:0] update_btb_target;
         logic                  update_btb_taken;
         logic                  retire_branch_valid;
     }RETIRE_BRANCH_t;
 
-    typedef struct {
+    typedef struct packed{
         logic [ADDR_WIDTH-1:0] retire_addr_0_reg;
         logic retire_valid_0_reg;
         logic [ADDR_WIDTH-1:0] retire_addr_1_reg;

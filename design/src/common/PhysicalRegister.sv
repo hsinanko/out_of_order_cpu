@@ -128,14 +128,38 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
             end
             // =========== free physical registers on retire ==========
             if(retire_pr_valid_0) begin
-                if(!PRF_busy[rd_phy_old_0])begin
-                    PRF_valid[rd_phy_old_0] <= 0;
-                    PRF_busy[rd_phy_new_0]  <= 0;
+                if(retire_pr_valid_1)begin
+                    PRF_busy[rd_phy_new_1]  <= 0;
+                    if(rd_phy_old_1 == rd_phy_new_0) begin
+                        // both instructions map to the same old physical register
+                        PRF_valid[rd_phy_old_1] <= 0;
+                    end
+                    else if(!PRF_busy[rd_phy_old_1]) begin
+                        PRF_valid[rd_phy_old_1] <= 0;
+                    end
                 end
                 else begin
                     PRF_busy[rd_phy_new_0]  <= 0;
+                    if(!PRF_busy[rd_phy_old_0])begin
+                        PRF_valid[rd_phy_old_0] <= 0;
+                    end
                 end
             end
+            else if(retire_pr_valid_1)begin
+                PRF_busy[rd_phy_new_1]  <= 0;
+                if(!PRF_busy[rd_phy_old_1])begin
+                    PRF_valid[rd_phy_old_1] <= 0;
+                end
+            end
+            // if(retire_pr_valid_0) begin
+            //     if(!PRF_busy[rd_phy_old_0])begin
+            //         PRF_valid[rd_phy_old_0] <= 0;
+            //         PRF_busy[rd_phy_new_0]  <= 0;
+            //     end
+            //     else begin
+            //         PRF_busy[rd_phy_new_0]  <= 0;
+            //     end
+            // end
         end
     end
 

@@ -28,9 +28,9 @@ module Issue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, ROB_WI
         issue_instruction_ls_fifo     = issue_instruction_ls;
         issue_instruction_branch_fifo = issue_instruction_branch;
 
-        issue_instruction_alu_fifo.valid    = !flush && issue_instruction_alu.valid;
-        issue_instruction_ls_fifo.valid     = !flush && issue_instruction_ls.valid;
-        issue_instruction_branch_fifo.valid = !flush && issue_instruction_branch.valid;
+        issue_instruction_alu_fifo.valid    = (flush) ? 0 : issue_instruction_alu.valid;
+        issue_instruction_ls_fifo.valid     = (flush) ? 0 : issue_instruction_ls.valid;
+        issue_instruction_branch_fifo.valid = (flush) ? 0 : issue_instruction_branch.valid;
     end
     
 
