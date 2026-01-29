@@ -13,8 +13,9 @@ INT = \
 		../src/interface/writeback_if.sv \
 		../src/interface/execution_if.sv \
 		../src/interface/physical_if.sv \
+		../src/interface/rob_status_if.sv \
 		../src/interface/rename_if.sv \
-		../src/interface/retire_if.sv
+		../src/interface/retire_if.sv 
 
 COM = \
 		../src/common/Back_RAT.sv \

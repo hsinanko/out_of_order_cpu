@@ -17,7 +17,8 @@ module WriteBack #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, RO
     input  logic [DATA_WIDTH-1:0] mem_rdata,
     input  logic                  mem_rdata_valid,
     // ========== retire interface ==============
-    retire_if.retire_store_sink   retire_store_bus,
+    retire_if.retire_store_sink   retire_store_bus_0,
+    retire_if.retire_store_sink   retire_store_bus_1,
     output logic                  mem_write_en,
     output logic [ADDR_WIDTH-1:0] mem_waddr,
     output logic [DATA_WIDTH-1:0] mem_wdata 
@@ -52,7 +53,8 @@ module WriteBack #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, RO
         .mem_rdata(mem_rdata),
         .mem_rdata_valid(mem_rdata_valid),
         // ========= retire interface ==============
-        .retire_store_bus(retire_store_bus),
+        .retire_store_bus_0(retire_store_bus_0),
+        .retire_store_bus_1(retire_store_bus_1),
         .mem_write_en(mem_write_en),
         .mem_waddr(mem_waddr),
         .mem_wdata(mem_wdata)

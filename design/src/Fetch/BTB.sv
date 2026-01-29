@@ -11,16 +11,32 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
     output predict_t              predict_0,
     output predict_t              predict_1,
     // Input from Commit Stage
-    retire_if.retire_branch_sink   retire_branch_bus
+    retire_if.retire_branch_sink   retire_branch_bus_0,
+    retire_if.retire_branch_sink   retire_branch_bus_1
 );
+    logic [ADDR_WIDTH-1:0] update_btb_pc_0, update_btb_pc_1;
+    logic [ADDR_WIDTH-1:0] update_btb_target_0, update_btb_target_1;
+    logic                  update_btb_taken_0, update_btb_taken_1;
+    logic                  retire_branch_valid_0, retire_branch_valid_1;
+
+    assign update_btb_pc_0       = retire_branch_bus_0.retire_branch_pkg.update_btb_pc;
+    assign update_btb_target_0   = retire_branch_bus_0.retire_branch_pkg.update_btb_target;
+    assign update_btb_taken_0    = retire_branch_bus_0.retire_branch_pkg.update_btb_taken;
+    assign retire_branch_valid_0 = retire_branch_bus_0.retire_branch_pkg.retire_branch_valid;
+
+    assign update_btb_pc_1       = retire_branch_bus_1.retire_branch_pkg.update_btb_pc;
+    assign update_btb_target_1   = retire_branch_bus_1.retire_branch_pkg.update_btb_target;
+    assign update_btb_taken_1    = retire_branch_bus_1.retire_branch_pkg.update_btb_taken;
+    assign retire_branch_valid_1 = retire_branch_bus_1.retire_branch_pkg.retire_branch_valid;
 
     // BTB Storage
     BTB_ENTRY_t btb [BTB_ENTRIES];
     BTB_ENTRY_t entry;
     logic [BTB_WIDTH-1:0] index;
-    logic [BTB_WIDTH-1:0] update_index;
+    logic [BTB_WIDTH-1:0] update_index_0, update_index_1;
 
-    assign update_index = retire_branch_bus.update_btb_pc[BTB_WIDTH+1:2];
+    assign update_index_0 = update_btb_pc_0[BTB_WIDTH+1:2];
+    assign update_index_1 = update_btb_pc_1[BTB_WIDTH+1:2];
     // Predict Logic
     always_comb begin
         if (pc_valid) begin
@@ -63,11 +79,22 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
                 btb[i].target <= '0;
                 btb[i].tag <= '0;
             end
-        end else if (retire_branch_bus.retire_branch_valid) begin
-            btb[update_index].valid  <= 1;
-            btb[update_index].taken  <= retire_branch_bus.update_btb_taken;
-            btb[update_index].target <= retire_branch_bus.update_btb_target;
-            btb[update_index].tag    <= retire_branch_bus.update_btb_pc[ADDR_WIDTH-1:BTB_WIDTH+2];
+        end 
+        else begin
+            if (retire_branch_valid_0) begin
+                btb[update_index_0].valid  <= 1;
+                btb[update_index_0].taken  <= update_btb_taken_0;
+                btb[update_index_0].target <= update_btb_target_0;
+                btb[update_index_0].tag    <= update_btb_pc_0[ADDR_WIDTH-1:BTB_WIDTH+2];
+            end
+
+            if(retire_branch_valid_1) begin
+                btb[update_index_1].valid  <= 1;
+                btb[update_index_1].taken  <= update_btb_taken_1;
+                btb[update_index_1].target <= update_btb_target_1;
+                btb[update_index_1].tag    <= update_btb_pc_1[ADDR_WIDTH-1:BTB_WIDTH+2];
+            end
+
         end
     end
 

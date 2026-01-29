@@ -55,14 +55,6 @@ package typedef_pkg;
     } ROB_ENTRY_t;
 
     typedef struct{
-        logic [NUM_ROB_ENTRY-1:0]       rob_finish;
-        ROB_ENTRY_t rob[NUM_ROB_ENTRY-1:0];
-        logic [NUM_ROB_ENTRY-1:0]       rob_head;
-        logic                           rob_full;
-        logic                           rob_empty;
-    } ROB_status_t;
-
-    typedef struct{
         logic [ADDR_WIDTH-1:0] addr;
         logic [6:0] opcode;
         logic [6:0] funct7;
@@ -96,9 +88,30 @@ package typedef_pkg;
     } LOAD_entry_t;
 
 
+    typedef struct{
+        logic [4:0]            rd_arch;
+        logic [PHY_WIDTH-1:0]  rd_phy_old;
+        logic [PHY_WIDTH-1:0]  rd_phy_new;
+        logic                  retire_pr_valid;
+    }RETIRE_PR_t;
+
+    typedef struct{
+        logic                  retire_store_valid;
+        logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id;
+    }RETIRE_STORE_t;
+
+    typedef struct{
+        logic [ADDR_WIDTH-1:0] update_btb_pc;
+        logic [ADDR_WIDTH-1:0] update_btb_target;
+        logic                  update_btb_taken;
+        logic                  retire_branch_valid;
+    }RETIRE_BRANCH_t;
+
     typedef struct {
-        logic [ADDR_WIDTH-1:0] retire_addr_reg;
-        logic retire_valid_reg;
+        logic [ADDR_WIDTH-1:0] retire_addr_0_reg;
+        logic retire_valid_0_reg;
+        logic [ADDR_WIDTH-1:0] retire_addr_1_reg;
+        logic retire_valid_1_reg;
         logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out;
         logic [PHY_REGS-1:0]PRF_busy_out;
         logic [PHY_REGS-1:0]PRF_valid_out;

@@ -29,7 +29,9 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     input  logic [DATA_WIDTH-1:0] mem_rdata,
     input  logic                  mem_rdata_valid,
     // ========= retire interface ==============
-    retire_if.retire_store_sink   retire_store_bus,
+    retire_if.retire_store_sink   retire_store_bus_0,
+    retire_if.retire_store_sink   retire_store_bus_1,
+    // store
     output logic                  mem_write_en,
     output logic [ADDR_WIDTH-1:0] mem_waddr,
     output logic [DATA_WIDTH-1:0] mem_wdata
@@ -55,7 +57,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     assign store_empty = (store_count == 0);   
     
     assign isStore = store_valid && !store_full;
-    assign isRetire = retire_store_bus.retire_store_valid && !store_empty;
+    assign isRetire = retire_store_valid && !store_empty;
 
     always_ff@(posedge clk or posedge rst) begin
         if (rst) begin
@@ -74,6 +76,20 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
 
     // ========== Store Queue Management ==========
     integer i;
+
+    logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id, retire_store_id_0, retire_store_id_1;
+    logic retire_store_valid, retire_store_valid_0, retire_store_valid_1;
+
+    assign retire_store_id_0  = retire_store_bus_0.retire_store_pkg.retire_store_id;
+    assign retire_store_valid_0 = retire_store_bus_0.retire_store_pkg.retire_store_valid;
+
+    assign retire_store_id_1  = retire_store_bus_1.retire_store_pkg.retire_store_id;
+    assign retire_store_valid_1 = retire_store_bus_1.retire_store_pkg.retire_store_valid;
+
+
+    assign retire_store_valid = retire_store_valid_0 || retire_store_valid_1;
+    assign retire_store_id    = (retire_store_valid_0) ? retire_store_id_0 : retire_store_id_1;
+    
     logic [$clog2(FIFO_DEPTH)-1:0] free_store_id;
     FreeEntry #(FIFO_DEPTH) store_free_entry (
         .clk(clk),
@@ -83,8 +99,8 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
         .is_empty(store_empty),
         .is_full(store_full),
         .free_entry(free_store_id),
-        .retire_store_valid(retire_store_bus.retire_store_valid),
-        .retire_entry(retire_store_bus.retire_store_id) 
+        .retire_store_valid(retire_store_valid),
+        .retire_entry(retire_store_id) 
     );
 
     assign store_id = (isStore) ? free_store_id : 'hx;
@@ -106,6 +122,9 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
                 StoreQueue[i].valid <= 1'b0;
             end
             store_count <= 0;
+            mem_write_en <= 1'b0;
+            mem_waddr    <= 'h0;
+            mem_wdata    <= 'h0;
         end
         else begin
             if(store_valid) begin
@@ -115,11 +134,11 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
                 StoreQueue[free_store_id].valid <= 1'b1;
             end
 
-            if(retire_store_bus.retire_store_valid) begin
-                StoreQueue[retire_store_bus.retire_store_id].valid <= 1'b0;
+            if(retire_store_valid_0) begin
+                StoreQueue[retire_store_id_0].valid <= 1'b0;
                 mem_write_en <= 1'b1;
-                mem_waddr    <= StoreQueue[retire_store_bus.retire_store_id].addr;
-                mem_wdata    <= StoreQueue[retire_store_bus.retire_store_id].data;
+                mem_waddr    <= StoreQueue[retire_store_id_0].addr;
+                mem_wdata    <= StoreQueue[retire_store_id_0].data;
             end
             else begin
                 mem_write_en <= 1'b0;

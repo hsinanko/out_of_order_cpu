@@ -17,7 +17,7 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     // commit 
     writeback_if.sink wb_to_rob_bus,
     // ROB status
-    output ROB_status_t rob_status
+    rob_status_if.source rob_status
     // debugging interface
 );
 
@@ -96,8 +96,15 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
             head <= 0;
         end
         else if(ROB_FINISH[head]) begin
-            ROB_FINISH[head] <= 1'b0;
-            head <= head + 1;
+            if(rob_status.retire_num == 2) begin
+                ROB_FINISH[head]   <= 1'b0;
+                ROB_FINISH[head+1] <= 1'b0;
+                head <= head + 2;
+            end
+            else begin
+                ROB_FINISH[head] <= 1'b0;
+                head <= head + 1;
+            end
         end
         else begin 
             head <= head;

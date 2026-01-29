@@ -85,8 +85,12 @@ module IssueExecution_tb();
 
     always_ff @(posedge clk)begin
         if(!rst)begin
-            if(debug_info.retire_valid_reg)
-                $display("Cycle: %5d Retired Address: 0x%08h", n_cycles, debug_info.retire_addr_reg);
+            if(debug_info.retire_valid_0_reg && debug_info.retire_valid_1_reg)
+                $display("Cycle: %5d Retired Address: 0x%08h, 0x%08h", n_cycles, debug_info.retire_addr_0_reg, debug_info.retire_addr_1_reg);
+            else if(debug_info.retire_valid_0_reg)
+                $display("Cycle: %5d Retired Address: 0x%08h", n_cycles, debug_info.retire_addr_0_reg);
+            else if(debug_info.retire_valid_1_reg)
+                $display("Cycle: %5d Retired Address: 0x%08h", n_cycles, debug_info.retire_addr_1_reg);
             else
                 $display("Cycle: %5d", n_cycles);
         end

@@ -24,7 +24,8 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
     // =========== writeback interface =================
     writeback_if.sink wb_to_prf_bus,
     // ============= commit /retire interface ====================
-    retire_if.retire_pr_sink retire_pr_bus,
+    retire_if.retire_pr_sink retire_pr_bus_0,
+    retire_if.retire_pr_sink retire_pr_bus_1,
     // === debugging interface =========================
     output logic [PHY_REGS*DATA_WIDTH-1:0]PRF_data_out,
     output logic [PHY_REGS-1:0]PRF_busy_out,
@@ -35,6 +36,20 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
     integer i;
     logic [DATA_WIDTH-1:0] PRF [0:PHY_REGS-1];
 
+
+    logic retire_pr_valid_0, retire_pr_valid_1;
+    logic [PHY_WIDTH-1:0] rd_arch_0, rd_arch_1;
+    logic [PHY_WIDTH-1:0] rd_phy_old_0, rd_phy_old_1;
+    logic [PHY_WIDTH-1:0] rd_phy_new_0, rd_phy_new_1;
+    assign retire_pr_valid_0 = retire_pr_bus_0.retire_pr_pkg.retire_pr_valid;
+    assign rd_arch_0         = retire_pr_bus_0.retire_pr_pkg.rd_arch;
+    assign rd_phy_old_0      = retire_pr_bus_0.retire_pr_pkg.rd_phy_old;
+    assign rd_phy_new_0      = retire_pr_bus_0.retire_pr_pkg.rd_phy_new;
+
+    assign retire_pr_valid_1 = retire_pr_bus_1.retire_pr_pkg.retire_pr_valid;
+    assign rd_arch_1         = retire_pr_bus_1.retire_pr_pkg.rd_arch;
+    assign rd_phy_old_1      = retire_pr_bus_1.retire_pr_pkg.rd_phy_old;
+    assign rd_phy_new_1      = retire_pr_bus_1.retire_pr_pkg.rd_phy_new;
     
     genvar j;
 
@@ -84,7 +99,7 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
             PRF_busy  <= 'h0;
         end
         else begin
-
+            // =========== mark physical registers as busy ==================
             if(busy_valid[0])begin
                 PRF_busy[rd_phy_busy_0]  <= 1;
                 PRF_valid[rd_phy_busy_0] <= 0;
@@ -93,7 +108,7 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
                 PRF_busy[rd_phy_busy_1]  <= 1;
                 PRF_valid[rd_phy_busy_1] <= 0;
             end
-
+            // =========== writeback to PRF ==================
             if(wb_to_prf_bus.alu_valid)begin
                 PRF[wb_to_prf_bus.rd_alu]       <= wb_to_prf_bus.alu_result;
                 PRF_valid[wb_to_prf_bus.rd_alu] <= 1;
@@ -111,13 +126,14 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
             if(wb_to_prf_bus.branch_valid)begin
                 PRF_valid[wb_to_prf_bus.rd_branch] <= 1;
             end
-            if(retire_pr_bus.retire_pr_valid) begin
-                if(!PRF_busy[retire_pr_bus.rd_phy_old])begin
-                    PRF_valid[retire_pr_bus.rd_phy_old] <= 0;
-                    PRF_busy[retire_pr_bus.rd_phy_new]  <= 0;
+            // =========== free physical registers on retire ==========
+            if(retire_pr_valid_0) begin
+                if(!PRF_busy[rd_phy_old_0])begin
+                    PRF_valid[rd_phy_old_0] <= 0;
+                    PRF_busy[rd_phy_new_0]  <= 0;
                 end
                 else begin
-                    PRF_busy[retire_pr_bus.rd_phy_new]  <= 0;
+                    PRF_busy[rd_phy_new_0]  <= 0;
                 end
             end
         end

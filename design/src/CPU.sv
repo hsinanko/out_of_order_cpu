@@ -29,15 +29,17 @@ module CPU #(parameter ADDR_WIDTH = 32,
     logic flush;
     logic isFlush;
     logic [ADDR_WIDTH-1:0] redirect_pc;
-
-    assign isFlush = retire_bus.isFlush;
+    logic [ADDR_WIDTH-1:0] target_pc;
+    assign isFlush = retire_bus_0_reg.isFlush || retire_bus_1_reg.isFlush;
+    assign target_pc = (retire_bus_0_reg.isFlush) ? retire_bus_0_reg.targetPC : retire_bus_1_reg.targetPC;
+    
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
             flush <= 1'b0;
         end
         else if(isFlush)begin
             flush <= 1'b1;
-            redirect_pc <= retire_bus.targetPC;
+            redirect_pc <= target_pc;
         end
         else begin
             flush <= 1'b0;
@@ -112,13 +114,15 @@ module CPU #(parameter ADDR_WIDTH = 32,
     logic [ADDR_WIDTH-1:0] mem_waddr;
     logic [DATA_WIDTH-1:0] mem_wdata;
     // ============ Reorder Buffer ==================
-    ROB_status_t rob_status;
+    rob_status_if #(NUM_ROB_ENTRY, ROB_WIDTH)rob_status ();
     // ============= Retire Stage ==================
     logic done_valid;
-    retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus();
-    retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus_reg();
+    retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus_0();
+    retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus_1();
+    retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus_0_reg();
+    retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus_1_reg();
     
-    assign done_valid = retire_bus_reg.retire_done_valid;
+    assign done_valid = retire_bus_0_reg.retire_done_valid || retire_bus_1_reg.retire_done_valid;
 
     //============ Free List ==================
     logic free_list_full, free_list_empty;
@@ -147,7 +151,8 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .pc_valid(pc_valid),
         .predict_0(predict_0),
         .predict_1(predict_1),
-        .retire_branch_bus(retire_bus_reg.retire_branch_sink)
+        .retire_branch_bus_0(retire_bus_0_reg.retire_branch_sink),
+        .retire_branch_bus_1(retire_bus_1_reg.retire_branch_sink)
     );
 
     always_ff @(posedge clk or posedge rst)begin
@@ -362,7 +367,8 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .mem_rdata(mem_rdata),
         .mem_rdata_valid(mem_rdata_valid),
         // Retire Interface
-        .retire_store_bus(retire_bus_reg.retire_store_sink),
+        .retire_store_bus_0(retire_bus_0_reg.retire_store_sink),
+        .retire_store_bus_1(retire_bus_1_reg.retire_store_sink),
         .mem_write_en(mem_write_en),
         .mem_waddr(mem_waddr),
         .mem_wdata(mem_wdata)
@@ -466,7 +472,8 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .freelist_1_bus(rename_1.freelist_sink),
         // retire
         // commit interface to free physical registers
-        .retire_pr_bus(retire_bus_reg.retire_pr_sink)
+        .retire_pr_bus_0(retire_bus_0_reg.retire_pr_sink),
+        .retire_pr_bus_1(retire_bus_1_reg.retire_pr_sink)
     );
 
     logic [ROB_WIDTH-1:0] rob_debug;
@@ -481,69 +488,79 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .rob_id_1(rob_id_1),
         .wb_to_rob_bus(wb_bus_reg.sink),
         // outputs to backend/architectural state
-        .rob_status(rob_status)
+        .rob_status(rob_status.source)
     );
 
     Retire #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH) Retire_Unit(
         .clk(clk),
         .rst(rst),
         .flush(flush),
-        .rob_status(rob_status),
-        .retire_bus(retire_bus.retire_source)
+        .rob_status(rob_status.sink),
+        .retire_bus_0(retire_bus_0.retire_source),
+        .retire_bus_1(retire_bus_1.retire_source)
     );
 
     
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
-            retire_bus_reg.isFlush             <= 1'b0;
-            retire_bus_reg.targetPC            <= 'h0;
-            retire_bus_reg.rd_arch             <= 'h0;
-            retire_bus_reg.rd_phy_old          <= 'h0;
-            retire_bus_reg.rd_phy_new          <= 'h0;
-            retire_bus_reg.update_btb_pc       <= 'h0;
-            retire_bus_reg.update_btb_taken    <= 1'b0;
-            retire_bus_reg.update_btb_target   <= 'h0;
-            retire_bus_reg.retire_pr_valid     <= 1'b0;
-            retire_bus_reg.retire_store_valid  <= 1'b0;
-            retire_bus_reg.retire_store_id     <= 'h0;
-            retire_bus_reg.retire_branch_valid <= 1'b0;
-            retire_bus_reg.retire_done_valid   <= 1'b0;
-            retire_bus_reg.rob_debug           <= 'h0;
-            retire_bus_reg.retire_addr         <= 'h0;
+            // retire bus 0
+            retire_bus_0_reg.isFlush             <= 1'b0;
+            retire_bus_0_reg.targetPC            <= 'h0;
+            retire_bus_0_reg.retire_pr_pkg       <= '{0, 0, 0, 0};
+            retire_bus_0_reg.retire_store_pkg    <= '{0, 0};
+            retire_bus_0_reg.retire_branch_pkg   <= '{0, 0, 0, 0};
+            retire_bus_0_reg.retire_done_valid   <= 1'b0;
+            retire_bus_0_reg.rob_debug           <= 'h0;
+            retire_bus_0_reg.retire_addr         <= 'h0;
+            // retire bus 1
+            retire_bus_1_reg.isFlush             <= 1'b0;
+            retire_bus_1_reg.targetPC            <= 'h0;
+            retire_bus_1_reg.retire_pr_pkg       <= '{0, 0, 0, 0};
+            retire_bus_1_reg.retire_store_pkg    <= '{0, 0};
+            retire_bus_1_reg.retire_branch_pkg   <= '{0, 0, 0, 0};
+            retire_bus_1_reg.retire_done_valid   <= 1'b0;
+            retire_bus_1_reg.rob_debug           <= 'h0;
+            retire_bus_1_reg.retire_addr         <= 'h0;
         end
         else if(flush)begin
-            retire_bus_reg.isFlush             <= 1'b0;
-            retire_bus_reg.targetPC            <= 'h0;
-            retire_bus_reg.rd_arch             <= 'h0;
-            retire_bus_reg.rd_phy_old          <= 'h0;
-            retire_bus_reg.rd_phy_new          <= 'h0;
-            retire_bus_reg.update_btb_pc       <= 'h0;
-            retire_bus_reg.update_btb_taken    <= 1'b0;
-            retire_bus_reg.update_btb_target   <= 'h0;
-            retire_bus_reg.retire_pr_valid     <= 1'b0;
-            retire_bus_reg.retire_store_valid  <= 1'b0;
-            retire_bus_reg.retire_store_id     <= 'h0;
-            retire_bus_reg.retire_branch_valid <= 1'b0;
-            retire_bus_reg.retire_done_valid   <= 1'b0;
-            retire_bus_reg.rob_debug           <= 'h0;
-            retire_bus_reg.retire_addr         <= 'h0;
+            // retire bus 0
+            retire_bus_0_reg.isFlush             <= 1'b0;
+            retire_bus_0_reg.targetPC            <= 'h0;
+            retire_bus_0_reg.retire_pr_pkg       <= '{0, 0, 0, 0};
+            retire_bus_0_reg.retire_store_pkg    <= '{0, 0};
+            retire_bus_0_reg.retire_branch_pkg   <= '{0, 0, 0, 0};
+            retire_bus_0_reg.retire_done_valid   <= 1'b0;
+            retire_bus_0_reg.rob_debug           <= 'h0;
+            retire_bus_0_reg.retire_addr         <= 'h0;
+            // retire bus 1
+            retire_bus_1_reg.isFlush             <= 1'b0;
+            retire_bus_1_reg.targetPC            <= 'h0;
+            retire_bus_1_reg.retire_pr_pkg       <= '{0, 0, 0, 0};
+            retire_bus_1_reg.retire_store_pkg    <= '{0, 0};
+            retire_bus_1_reg.retire_branch_pkg   <= '{0, 0, 0, 0};
+            retire_bus_1_reg.retire_done_valid   <= 1'b0;
+            retire_bus_1_reg.rob_debug           <= 'h0;
+            retire_bus_1_reg.retire_addr         <= 'h0;
         end
         else begin
-            retire_bus_reg.isFlush             <= retire_bus.isFlush;
-            retire_bus_reg.targetPC            <= retire_bus.targetPC;
-            retire_bus_reg.rd_arch             <= retire_bus.rd_arch;
-            retire_bus_reg.rd_phy_old          <= retire_bus.rd_phy_old;
-            retire_bus_reg.rd_phy_new          <= retire_bus.rd_phy_new;
-            retire_bus_reg.update_btb_pc       <= retire_bus.update_btb_pc;
-            retire_bus_reg.update_btb_taken    <= retire_bus.update_btb_taken;
-            retire_bus_reg.update_btb_target   <= retire_bus.update_btb_target;
-            retire_bus_reg.retire_pr_valid     <= retire_bus.retire_pr_valid;
-            retire_bus_reg.retire_store_valid  <= retire_bus.retire_store_valid;
-            retire_bus_reg.retire_store_id     <= retire_bus.retire_store_id;
-            retire_bus_reg.retire_branch_valid <= retire_bus.retire_branch_valid;
-            retire_bus_reg.retire_done_valid   <= retire_bus.retire_done_valid;
-            retire_bus_reg.rob_debug           <= retire_bus.rob_debug;
-            retire_bus_reg.retire_addr         <= retire_bus.retire_addr;
+            // retire bus 0
+            retire_bus_0_reg.isFlush             <= retire_bus_0.isFlush;
+            retire_bus_0_reg.targetPC            <= retire_bus_0.targetPC;
+            retire_bus_0_reg.retire_pr_pkg       <= retire_bus_0.retire_pr_pkg;
+            retire_bus_0_reg.retire_store_pkg    <= retire_bus_0.retire_store_pkg;
+            retire_bus_0_reg.retire_branch_pkg   <= retire_bus_0.retire_branch_pkg;
+            retire_bus_0_reg.retire_done_valid   <= retire_bus_0.retire_done_valid;
+            retire_bus_0_reg.rob_debug           <= retire_bus_0.rob_debug;
+            retire_bus_0_reg.retire_addr         <= retire_bus_0.retire_addr;
+            // retire bus 1
+            retire_bus_1_reg.isFlush             <= retire_bus_1.isFlush;
+            retire_bus_1_reg.targetPC            <= retire_bus_1.targetPC;
+            retire_bus_1_reg.retire_pr_pkg       <= retire_bus_1.retire_pr_pkg;
+            retire_bus_1_reg.retire_store_pkg    <= retire_bus_1.retire_store_pkg;
+            retire_bus_1_reg.retire_branch_pkg   <= retire_bus_1.retire_branch_pkg;
+            retire_bus_1_reg.retire_done_valid   <= retire_bus_1.retire_done_valid;
+            retire_bus_1_reg.rob_debug           <= retire_bus_1.rob_debug;
+            retire_bus_1_reg.retire_addr         <= retire_bus_1.retire_addr;
         end
     end
 
@@ -551,7 +568,8 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .clk(clk),
         .rst(rst),
         .flush(flush),
-        .retire_pr_bus(retire_bus_reg.retire_pr_sink),
+        .retire_pr_bus_0(retire_bus_0_reg.retire_pr_sink),
+        .retire_pr_bus_1(retire_bus_1_reg.retire_pr_sink),
         .back_rat(back_rat)
     );
 
@@ -586,7 +604,8 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .wb_to_prf_bus(wb_bus_reg.sink),
         // from retire stage
         // =========== commit interface =================
-        .retire_pr_bus(retire_bus_reg.retire_pr_sink),
+        .retire_pr_bus_0(retire_bus_0_reg.retire_pr_sink),
+        .retire_pr_bus_1(retire_bus_1_reg.retire_pr_sink),
         // ===========
         // outputs for debug
         .PRF_data_out(debug_info.PRF_data_out),
@@ -597,10 +616,23 @@ module CPU #(parameter ADDR_WIDTH = 32,
 
     // ============= Debugging ==================
     logic [ROB_WIDTH-1:0] retire_count;
-    
+
+    RETIRE_BRANCH_t retire_branch_0_debug, retire_branch_1_debug;
+    RETIRE_PR_t retire_pr_0_debug, retire_pr_1_debug;
+    RETIRE_STORE_t retire_store_0_debug, retire_store_1_debug;
+    assign retire_branch_0_debug = retire_bus_0_reg.retire_branch_sink.retire_branch_pkg;
+    assign retire_pr_0_debug     = retire_bus_0_reg.retire_pr_sink.retire_pr_pkg;
+    assign retire_store_0_debug  = retire_bus_0_reg.retire_store_sink.retire_store_pkg;
+
+    assign retire_branch_1_debug = retire_bus_1_reg.retire_branch_sink.retire_branch_pkg;
+    assign retire_pr_1_debug     = retire_bus_1_reg.retire_pr_sink.retire_pr_pkg;
+    assign retire_store_1_debug  = retire_bus_1_reg.retire_store_sink.retire_store_pkg; 
+
     assign debug_info.back_rat_out = back_rat;
-    assign debug_info.retire_addr_reg  = (flush) ? 'h0 : retire_bus_reg.retire_addr;
-    assign debug_info.retire_valid_reg = (flush) ? 1'b0 : (retire_bus_reg.retire_pr_valid || retire_bus_reg.retire_store_valid || retire_bus_reg.retire_branch_valid);
+    assign debug_info.retire_addr_0_reg  = (flush) ? 'h0 : retire_bus_0_reg.retire_addr;
+    assign debug_info.retire_valid_0_reg = (flush) ? 1'b0 : (retire_pr_0_debug.retire_pr_valid || retire_store_0_debug.retire_store_valid || retire_branch_0_debug.retire_branch_valid);
+    assign debug_info.retire_addr_1_reg  = (flush) ? 'h0 : retire_bus_1_reg.retire_addr;
+    assign debug_info.retire_valid_1_reg = (flush) ? 1'b0 : (retire_pr_1_debug.retire_pr_valid || retire_store_1_debug.retire_store_valid || retire_branch_1_debug.retire_branch_valid);
     assign debug_info.retire_count = retire_count;
 
     
@@ -611,7 +643,10 @@ module CPU #(parameter ADDR_WIDTH = 32,
         else if(flush) begin
             retire_count <= 0;
         end
-        else if (retire_bus_reg.retire_pr_valid || retire_bus_reg.retire_store_valid || retire_bus_reg.retire_branch_valid) begin
+        else if (debug_info.retire_valid_0_reg && debug_info.retire_valid_1_reg) begin
+            retire_count <= retire_count + 2;
+        end
+        else if (debug_info.retire_valid_0_reg || debug_info.retire_valid_1_reg) begin
             retire_count <= retire_count + 1;
         end
     end

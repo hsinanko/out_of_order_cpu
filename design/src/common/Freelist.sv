@@ -11,8 +11,23 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
     rename_if.freelist_sink freelist_0_bus,
     rename_if.freelist_sink freelist_1_bus,
     // commit interface to free physical registers (handled in Back_RAT
-    retire_if.retire_pr_sink retire_pr_bus
+    retire_if.retire_pr_sink retire_pr_bus_0,
+    retire_if.retire_pr_sink retire_pr_bus_1
 );
+
+    logic retire_pr_valid_0, retire_pr_valid_1;
+    logic [PHY_WIDTH-1:0] rd_arch_0, rd_arch_1;
+    logic [PHY_WIDTH-1:0] rd_phy_old_0, rd_phy_old_1;
+    logic [PHY_WIDTH-1:0] rd_phy_new_0, rd_phy_new_1;
+    assign retire_pr_valid_0 = retire_pr_bus_0.retire_pr_pkg.retire_pr_valid;
+    assign rd_arch_0         = retire_pr_bus_0.retire_pr_pkg.rd_arch;
+    assign rd_phy_old_0      = retire_pr_bus_0.retire_pr_pkg.rd_phy_old;
+    assign rd_phy_new_0      = retire_pr_bus_0.retire_pr_pkg.rd_phy_new;
+
+    assign retire_pr_valid_1 = retire_pr_bus_1.retire_pr_pkg.retire_pr_valid;
+    assign rd_arch_1         = retire_pr_bus_1.retire_pr_pkg.rd_arch;
+    assign rd_phy_old_1      = retire_pr_bus_1.retire_pr_pkg.rd_phy_old;
+    assign rd_phy_new_1      = retire_pr_bus_1.retire_pr_pkg.rd_phy_new;
     integer i;
 
     logic [PHY_WIDTH-1:0] FREELIST [0:FREE_REG-1]; // stores the list of free physical registers
@@ -48,7 +63,8 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
         if(rst || flush) num_free = FREE_REG;
         else begin
             num_free = num_free_reg;
-            if(retire_pr_bus.retire_pr_valid) num_free = num_free + 1;
+            if(retire_pr_valid_0) num_free = num_free + 1;
+            if(retire_pr_valid_1) num_free = num_free + 1;
             if(freelist_0_bus.valid && freelist_1_bus.valid) num_free = num_free - 2;
             else if(freelist_0_bus.valid || freelist_1_bus.valid) num_free = num_free - 1;
         end
@@ -89,10 +105,16 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
             end
 
 
-            if(retire_pr_bus.retire_pr_valid) begin
+            if(retire_pr_valid_0) begin
             // Free physical registers on commit
-                FREELIST[tail + 1] <= retire_pr_bus.rd_phy_old;
-                is_busy[retire_pr_bus.rd_phy_new] <= 1'b0;
+                FREELIST[tail + 1] <= rd_phy_old_0;
+                is_busy[rd_phy_new_0] <= 1'b0;
+                tail     <= tail + 1;
+            end
+            if(retire_pr_valid_1) begin
+            // Free physical registers on commit
+                FREELIST[tail + 1] <= rd_phy_old_1;
+                is_busy[rd_phy_new_1] <= 1'b0;
                 tail     <= tail + 1;
             end
 

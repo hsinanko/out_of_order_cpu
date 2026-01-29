@@ -4,11 +4,27 @@ module Back_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     input logic clk,
     input logic rst,
     input logic flush,
-    retire_if.retire_pr_sink retire_pr_bus,
+    retire_if.retire_pr_sink retire_pr_bus_0,
+    retire_if.retire_pr_sink retire_pr_bus_1,
     output [PHY_WIDTH*ARCH_REGS-1:0]back_rat
 );
     logic [PHY_WIDTH-1:0] BACK_RAT [0:ARCH_REGS-1];
 
+    logic retire_pr_valid_0, retire_pr_valid_1;
+    logic [PHY_WIDTH-1:0] rd_arch_0, rd_arch_1;
+    logic [PHY_WIDTH-1:0] rd_phy_old_0, rd_phy_old_1;
+    logic [PHY_WIDTH-1:0] rd_phy_new_0, rd_phy_new_1;
+
+    assign retire_pr_valid_0 = retire_pr_bus_0.retire_pr_pkg.retire_pr_valid;
+    assign rd_arch_0         = retire_pr_bus_0.retire_pr_pkg.rd_arch;
+    assign rd_phy_old_0      = retire_pr_bus_0.retire_pr_pkg.rd_phy_old;
+    assign rd_phy_new_0      = retire_pr_bus_0.retire_pr_pkg.rd_phy_new;
+    
+    assign retire_pr_valid_1 = retire_pr_bus_1.retire_pr_pkg.retire_pr_valid;
+    assign rd_arch_1         = retire_pr_bus_1.retire_pr_pkg.rd_arch;
+    assign rd_phy_old_1      = retire_pr_bus_1.retire_pr_pkg.rd_phy_old;
+    assign rd_phy_new_1      = retire_pr_bus_1.retire_pr_pkg.rd_phy_new;
+    
     genvar i;
     integer j;
     generate
@@ -25,8 +41,11 @@ module Back_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
                 BACK_RAT[j] <= j;
         end
         else if (!flush) begin
-            if (retire_pr_bus.retire_pr_valid) begin
-                BACK_RAT[retire_pr_bus.rd_arch] <= retire_pr_bus.rd_phy_new;
+            if (retire_pr_valid_0) begin
+                BACK_RAT[rd_arch_0] <= rd_phy_new_0;
+            end
+            else if (retire_pr_valid_1) begin
+                BACK_RAT[rd_arch_1] <= rd_phy_new_1;
             end
         end
     end
