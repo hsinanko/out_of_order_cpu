@@ -15,7 +15,10 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     output logic [ROB_WIDTH-1:0] rob_id_1,
 
     // commit 
-    writeback_if.sink wb_to_rob_bus,
+    input WB_alu_t wb_alu,
+    input WB_store_t wb_store,
+    input WB_load_t wb_load,
+    input WB_branch_t wb_branch,
     // ROB status
     rob_status_if.source rob_status
     // debugging interface
@@ -119,22 +122,22 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
             ROB_FINISH <= 'b0;
         end
         else begin
-            if(wb_to_rob_bus.alu_valid) begin
-                ROB_FINISH[wb_to_rob_bus.alu_rob_id] <= 1'b1;
+            if(wb_alu.alu_valid) begin
+                ROB_FINISH[wb_alu.alu_rob_id] <= 1'b1;
             end
-            if(wb_to_rob_bus.load_valid) begin
-                ROB_FINISH[wb_to_rob_bus.load_rob_id] <= 1'b1;
+            if(wb_load.load_valid) begin
+                ROB_FINISH[wb_load.load_rob_id] <= 1'b1;
             end
-            if(wb_to_rob_bus.store_valid) begin
-                ROB_FINISH[wb_to_rob_bus.store_rob_id] <= 1'b1;
-                ROB[wb_to_rob_bus.store_rob_id].store_id <= wb_to_rob_bus.store_id;
+            if(wb_store.store_valid) begin
+                ROB_FINISH[wb_store.store_rob_id] <= 1'b1;
+                ROB[wb_store.store_rob_id].store_id <= wb_store.store_id;
             end
-            if(wb_to_rob_bus.branch_valid) begin
-                ROB_FINISH[wb_to_rob_bus.branch_rob_id]        <= 1'b1;
-                ROB[wb_to_rob_bus.branch_rob_id].mispredict    <= wb_to_rob_bus.mispredict;
-                ROB[wb_to_rob_bus.branch_rob_id].actual_target <= wb_to_rob_bus.actual_target; // to be used for updating PC on mispredict
-                ROB[wb_to_rob_bus.branch_rob_id].actual_taken  <= wb_to_rob_bus.actual_taken;
-                ROB[wb_to_rob_bus.branch_rob_id].update_pc     <= wb_to_rob_bus.update_pc;
+            if(wb_branch.branch_valid) begin
+                ROB_FINISH[wb_branch.branch_rob_id]        <= 1'b1;
+                ROB[wb_branch.branch_rob_id].mispredict    <= wb_branch.mispredict;
+                ROB[wb_branch.branch_rob_id].actual_target <= wb_branch.actual_target; // to be used for updating PC on mispredict
+                ROB[wb_branch.branch_rob_id].actual_taken  <= wb_branch.actual_taken;
+                ROB[wb_branch.branch_rob_id].update_pc     <= wb_branch.update_pc;
             end
             
         end

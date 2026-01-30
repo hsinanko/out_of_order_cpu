@@ -70,6 +70,80 @@ package typedef_pkg;
         logic [31:0] age;
     } RS_ENTRY_t;
 
+    // ====== execution structures =======
+
+    typedef struct packed{
+        logic                  alu_valid;
+        logic [ROB_WIDTH-1:0]  alu_rob_id;
+        logic [DATA_WIDTH-1:0] alu_result;
+        logic [PHY_WIDTH-1:0]  rd_phy_alu;
+        logic                  busy_alu;
+    } EXE_alu_t;
+
+    typedef struct packed{
+        logic                  store_valid;
+        logic [ADDR_WIDTH-1:0] store_waddr; 
+        logic [DATA_WIDTH-1:0] store_wdata;
+        logic [ROB_WIDTH-1:0]  store_rob_id;
+        logic                  load_valid;
+        logic [2:0]            load_funct3;
+        logic [ADDR_WIDTH-1:0] load_raddr;
+        logic [ROB_WIDTH-1:0]  load_rob_id;
+        logic [PHY_WIDTH-1:0]  load_rd_phy;
+        logic                  busy_lsu;
+    } EXE_lsu_t;
+
+    typedef struct packed{
+        logic                  branch_valid;
+        logic                  jump_valid;
+        logic [ROB_WIDTH-1:0]  branch_rob_id;
+        logic [PHY_WIDTH-1:0]  rd_phy_branch;
+        logic [ADDR_WIDTH-1:0] nextPC;
+        logic                  mispredict;
+        logic                  actual_taken;
+        logic [ADDR_WIDTH-1:0] actual_target;
+        logic [ADDR_WIDTH-1:0] update_pc;
+        logic                  busy_branch;
+    } EXE_branch_t;
+
+    // wrtieback structures
+    typedef struct packed{
+        // alu
+        logic                  alu_valid;
+        logic [ROB_WIDTH-1:0]  alu_rob_id;
+        logic [DATA_WIDTH-1:0] alu_result;
+        logic [PHY_WIDTH-1:0]  rd_alu;
+    }WB_alu_t;
+
+    typedef struct packed{
+        // store
+        logic                  store_valid;
+        logic [ROB_WIDTH-1:0]  store_rob_id;
+        logic [$clog2(FIFO_DEPTH)-1:0] store_id;
+    } WB_store_t;
+
+    typedef struct packed{
+        // load
+        logic                  load_valid;
+        logic [ROB_WIDTH-1:0]  load_rob_id;
+        logic [DATA_WIDTH-1:0] load_rdata;
+        logic [PHY_WIDTH-1:0]  rd_load;
+    } WB_load_t;  
+
+    typedef struct packed{
+        // branch
+        logic                  branch_valid;
+        logic                  jump_valid;
+        logic [ROB_WIDTH-1:0]  branch_rob_id;
+        logic [PHY_WIDTH-1:0]  rd_branch;
+        logic [ADDR_WIDTH-1:0] nextPC;
+        logic                  mispredict;
+        logic                  actual_taken;
+        logic [ADDR_WIDTH-1:0] actual_target;
+        logic [ADDR_WIDTH-1:0] update_pc;
+    } WB_branch_t;
+
+    // ====== Load Store Queue Structures ======
     typedef struct packed{
         logic [31:0] age;
         logic [ADDR_WIDTH-1:0] addr;
@@ -87,6 +161,8 @@ package typedef_pkg;
         logic valid;
     } LOAD_entry_t;
 
+
+    // ====== retire structures ========
 
     typedef struct packed{
         logic [4:0]            rd_arch;

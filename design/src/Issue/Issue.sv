@@ -15,7 +15,9 @@ module Issue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, ROB_WI
     physical_if.source lsu_prf_bus,
     physical_if.source branch_prf_bus,
     // ============= execution ==================
-    execution_if.source exe_bus
+    output EXE_alu_t   exe_alu,
+    output EXE_lsu_t   exe_lsu,
+    output EXE_branch_t exe_branch
 );
 
     RS_ENTRY_t issue_instruction_alu_fifo;
@@ -47,7 +49,9 @@ module Issue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, ROB_WI
         .lsu_prf_bus(lsu_prf_bus),
         .branch_prf_bus(branch_prf_bus),
         // output to commit stage
-        .exe_bus(exe_bus)
+        .exe_alu(exe_alu),
+        .exe_lsu(exe_lsu),
+        .exe_branch(exe_branch)
     );
 
 endmodule

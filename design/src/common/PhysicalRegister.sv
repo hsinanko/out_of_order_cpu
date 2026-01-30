@@ -22,7 +22,9 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
     // branch
     physical_if.sink  branch_prf_bus,
     // =========== writeback interface =================
-    writeback_if.sink wb_to_prf_bus,
+    input WB_alu_t wb_alu,
+    input WB_load_t wb_load,
+    input WB_branch_t wb_branch,
     // ============= commit /retire interface ====================
     retire_if.retire_pr_sink retire_pr_bus_0,
     retire_if.retire_pr_sink retire_pr_bus_1,
@@ -109,22 +111,22 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
                 PRF_valid[rd_phy_busy_1] <= 0;
             end
             // =========== writeback to PRF ==================
-            if(wb_to_prf_bus.alu_valid)begin
-                PRF[wb_to_prf_bus.rd_alu]       <= wb_to_prf_bus.alu_result;
-                PRF_valid[wb_to_prf_bus.rd_alu] <= 1;
+            if(wb_alu.alu_valid)begin
+                PRF[wb_alu.rd_alu]       <= wb_alu.alu_result;
+                PRF_valid[wb_alu.rd_alu] <= 1;
             end
-            if(wb_to_prf_bus.load_valid)begin
-                PRF[wb_to_prf_bus.rd_load]       <= wb_to_prf_bus.load_rdata;
-                PRF_valid[wb_to_prf_bus.rd_load] <= 1;
+            if(wb_load.load_valid)begin
+                PRF[wb_load.rd_load]       <= wb_load.load_rdata;
+                PRF_valid[wb_load.rd_load] <= 1;
             end
-            if(wb_to_prf_bus.jump_valid)begin
-                if(wb_to_prf_bus.rd_branch != '0)begin
-                    PRF[wb_to_prf_bus.rd_branch]       <= wb_to_prf_bus.nextPC;
-                    PRF_valid[wb_to_prf_bus.rd_branch] <= 1;
+            if(wb_branch.jump_valid)begin
+                if(wb_branch.rd_branch != '0)begin
+                    PRF[wb_branch.rd_branch]       <= wb_branch.nextPC;
+                    PRF_valid[wb_branch.rd_branch] <= 1;
                 end
             end
-            if(wb_to_prf_bus.branch_valid)begin
-                PRF_valid[wb_to_prf_bus.rd_branch] <= 1;
+            if(wb_branch.branch_valid)begin
+                PRF_valid[wb_branch.rd_branch] <= 1;
             end
             // =========== free physical registers on retire ==========
             if(retire_pr_valid_0) begin

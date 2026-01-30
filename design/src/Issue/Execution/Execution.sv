@@ -4,9 +4,9 @@ import typedef_pkg::*;
 
 module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PHY_WIDTH = 6)(
     // from issue stage
-    input  logic                clk,
-    input  logic                rst,
-    input  logic                flush,
+    input  logic      clk,
+    input  logic      rst,
+    input  logic      flush,
     input  RS_ENTRY_t issue_instruction_alu,
     input  RS_ENTRY_t issue_instruction_ls,
     input  RS_ENTRY_t issue_instruction_branch,
@@ -15,7 +15,9 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
     physical_if.source lsu_prf_bus,
     physical_if.source branch_prf_bus,
     // output to commit stage
-    execution_if.source exe_bus
+    output EXE_alu_t   exe_alu,
+    output EXE_lsu_t   exe_lsu,
+    output EXE_branch_t exe_branch
 );
     // ========== ALU unit ====================
     logic [3:0]alu_control;
@@ -49,12 +51,12 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
 
 
     always_comb begin
-        exe_bus.alu_valid  = issue_instruction_alu.valid;
-        exe_bus.alu_result = alu_result;
-        exe_bus.alu_rob_id = issue_instruction_alu.rob_id;
-        exe_bus.rd_phy_alu = issue_instruction_alu.rd_phy;
+        exe_alu.alu_valid  = issue_instruction_alu.valid;
+        exe_alu.alu_result = alu_result;
+        exe_alu.alu_rob_id = issue_instruction_alu.rob_id;
+        exe_alu.rd_phy_alu = issue_instruction_alu.rd_phy;
     end
-    assign exe_bus.busy_alu = 0;
+    assign exe_alu.busy_alu = 0;
     // ============ Load/Store Unit =====================
 
     logic [ADDR_WIDTH-1:0]addr;
@@ -90,44 +92,39 @@ module Execution #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, ROB_WIDTH = 5, PH
         .funct3(funct3_ls),  
         .rob_id(ls_rob_id),
         .rd_phy(rd_phy_ls),
-        .store_waddr(exe_bus.store_waddr), // store --> to memory
-        .store_wdata(exe_bus.store_wdata), // store
-        .store_rob_id(exe_bus.store_rob_id),
-        .store_valid(exe_bus.store_valid),
-        .load_raddr(exe_bus.load_raddr),
-        .load_funct3(exe_bus.load_funct3),
-        .load_rob_id(exe_bus.load_rob_id),
-        .load_rd_phy(exe_bus.load_rd_phy),
-        .load_valid(exe_bus.load_valid)
+        .store_waddr(exe_lsu.store_waddr), // store --> to memory
+        .store_wdata(exe_lsu.store_wdata), // store
+        .store_rob_id(exe_lsu.store_rob_id),
+        .store_valid(exe_lsu.store_valid),
+        .load_raddr(exe_lsu.load_raddr),
+        .load_funct3(exe_lsu.load_funct3),
+        .load_rob_id(exe_lsu.load_rob_id),
+        .load_rd_phy(exe_lsu.load_rd_phy),
+        .load_valid(exe_lsu.load_valid)
     );
 
-    assign exe_bus.busy_lsu = 0;
+    assign exe_lsu.busy_lsu = 0;
     // ============== Branch Unit ==================
     
-    assign exe_bus.busy_branch   = 0;
-    assign exe_bus.branch_rob_id = issue_instruction_branch.rob_id;
-    assign exe_bus.branch_valid  = issue_instruction_branch.valid;
-    assign exe_bus.rd_phy_branch  = issue_instruction_branch.rd_phy;
-
     assign branch_prf_bus.rs1_phy = issue_instruction_branch.rs1_phy;
     assign branch_prf_bus.rs2_phy = issue_instruction_branch.rs2_phy;
     assign branch_prf_bus.valid   = (flush) ? 0 : issue_instruction_branch.valid;
 
-    BranchUnit #(ADDR_WIDTH, DATA_WIDTH) branchUnit(
-        .instruction_addr(issue_instruction_branch.addr),
+    BranchUnit #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH) branchUnit(
+        .issue_instruction_branch(issue_instruction_branch),
         .rs1_data_branch(branch_prf_bus.rs1_data),
         .rs2_data_branch(branch_prf_bus.rs2_data),
-        .opcode(issue_instruction_branch.opcode),
-        .immediate(issue_instruction_branch.immediate),
-        .funct3(issue_instruction_branch.funct3),
-        .predict_taken(issue_instruction_branch.predict_taken),
-        .predict_target(issue_instruction_branch.predict_target),
-        .mispredict(exe_bus.mispredict),
-        .actual_taken(exe_bus.actual_taken),
-        .actual_target(exe_bus.actual_target),
-        .update_pc(exe_bus.update_pc),
-        .nextPC(exe_bus.nextPC),
-        .isJump(exe_bus.isJump)
+        .branch_valid(exe_branch.branch_valid),
+        .jump_valid(exe_branch.jump_valid),
+        .branch_rob_id(exe_branch.branch_rob_id),
+        .rd_phy_branch(exe_branch.rd_phy_branch),
+        .nextPC(exe_branch.nextPC),
+        .mispredict(exe_branch.mispredict),
+        .actual_taken(exe_branch.actual_taken),
+        .actual_target(exe_branch.actual_target),
+        .update_pc(exe_branch.update_pc)
     );
+
+    assign exe_branch.busy_branch   = 0;
 
 endmodule

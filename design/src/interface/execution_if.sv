@@ -20,14 +20,14 @@ interface execution_if #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH =
     logic                  busy_lsu;
     // Branch outputs
     logic                  branch_valid;
+    logic                  jump_valid;
     logic [ROB_WIDTH-1:0]  branch_rob_id;
+    logic [PHY_WIDTH-1:0]  rd_phy_branch;
     logic                  actual_taken;
+    logic [ADDR_WIDTH-1:0] nextPC;
     logic                  mispredict;
     logic [ADDR_WIDTH-1:0] actual_target;
     logic [ADDR_WIDTH-1:0] update_pc;
-    logic [ADDR_WIDTH-1:0] nextPC;
-    logic [PHY_WIDTH-1:0]  rd_phy_branch;
-    logic                  isJump;
     logic                  busy_branch;
 
 
@@ -50,14 +50,14 @@ interface execution_if #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH =
         output busy_lsu,
         // branch
         output branch_valid,
+        output jump_valid,
         output branch_rob_id,
-        output actual_taken,
+        output rd_phy_branch,
+        output nextPC,
         output mispredict,
+        output actual_taken,
         output actual_target,
         output update_pc,
-        output nextPC,
-        output rd_phy_branch,
-        output isJump,
         output busy_branch
     );
 
@@ -80,14 +80,14 @@ interface execution_if #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH =
         input busy_lsu,
         // branch
         input branch_valid,
+        input jump_valid,
         input branch_rob_id,
-        input actual_taken,
+        input rd_phy_branch,
+        input nextPC,
         input mispredict,
+        input actual_taken,
         input actual_target,
         input update_pc,
-        input nextPC,
-        input rd_phy_branch,
-        input isJump,
         input busy_branch
     );
 endinterface : execution_if

@@ -84,12 +84,15 @@ module CPU #(parameter ADDR_WIDTH = 32,
     RS_ENTRY_t issue_instruction_alu_reg, issue_instruction_ls_reg, issue_instruction_branch_reg;
 
     // ============ Issue / Execution Stage ==================
-    execution_if #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH)exe_bus();
-    execution_if #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH)exe_bus_reg();
+    EXE_alu_t exe_alu, exe_alu_reg;
+    EXE_lsu_t exe_lsu, exe_lsu_reg;
+    EXE_branch_t exe_branch, exe_branch_reg;
         
     // ============= Write Back Stage ==================
-    writeback_if #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH, FIFO_DEPTH)wb_bus();
-    writeback_if #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH, FIFO_DEPTH)wb_bus_reg();
+    WB_alu_t wb_alu, wb_alu_reg;
+    WB_store_t wb_store, wb_store_reg;
+    WB_load_t  wb_load, wb_load_reg;
+    WB_branch_t wb_branch, wb_branch_reg;
 
     // ============= Physical Register File ==================
     logic [PHY_REGS-1:0]PRF_busy;
@@ -261,95 +264,60 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .lsu_prf_bus(lsu_prf_bus.source),
         .branch_prf_bus(branch_prf_bus.source),
         // output to commit stage
-        .exe_bus(exe_bus)
+        .exe_alu(exe_alu),
+        .exe_lsu(exe_lsu),
+        .exe_branch(exe_branch)
     );
 
 
 
     always_ff @(posedge clk or posedge rst) begin
         if(rst) begin
-            // alu outputs
-            exe_bus_reg.alu_rob_id <= 0;
-            exe_bus_reg.alu_result <= 0;
-            exe_bus_reg.rd_phy_alu <= 0;
-            // Load/Store outputs
-            exe_bus_reg.store_waddr <= 0;
-            exe_bus_reg.store_wdata <= 0;
-            exe_bus_reg.store_rob_id <= 0;
-            exe_bus_reg.store_valid  <= 0;
-            exe_bus_reg.load_funct3  <= 0;
-            exe_bus_reg.load_valid   <= 0;
-            exe_bus_reg.load_raddr   <= 0;
-            exe_bus_reg.load_rob_id  <= 0;
-            exe_bus_reg.load_rd_phy  <= 0;
-            // Branch outputs
-            exe_bus_reg.branch_rob_id <= 0;
-            exe_bus_reg.actual_taken  <= 0;
-            exe_bus_reg.actual_target <= 0;
-            exe_bus_reg.nextPC        <= 0;
-            exe_bus_reg.update_pc     <= 0;
-            exe_bus_reg.rd_phy_branch <= 0;
-            exe_bus_reg.isJump        <= 0;
-            exe_bus_reg.mispredict    <= 0;
+            exe_alu_reg <= '{0, 0, 0, 0, 0};
+            exe_lsu_reg <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            exe_branch_reg <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         end
         else if(flush)begin
-            // alu outputs
-            exe_bus_reg.alu_rob_id   <= 0;
-            exe_bus_reg.alu_result   <= 0;
-            exe_bus_reg.rd_phy_alu   <= 0;
-            exe_bus_reg.alu_valid    <= 0;
-            // Load/Store outputs
-            exe_bus_reg.store_waddr  <= 0;
-            exe_bus_reg.store_wdata  <= 0;
-            exe_bus_reg.store_rob_id <= 0;
-            exe_bus_reg.store_valid  <= 0;
-            exe_bus_reg.load_funct3  <= 0;
-            exe_bus_reg.load_valid   <= 0;
-            exe_bus_reg.load_raddr   <= 0;
-            exe_bus_reg.load_rob_id  <= 0;
-            exe_bus_reg.load_rd_phy  <= 0;
-            // Branch outputs
-            exe_bus_reg.branch_valid  <= 0;
-            exe_bus_reg.branch_rob_id <= 0;
-            exe_bus_reg.actual_taken  <= 0;
-            exe_bus_reg.actual_target <= 0;
-            exe_bus_reg.nextPC        <= 0;
-            exe_bus_reg.update_pc     <= 0;
-            exe_bus_reg.rd_phy_branch <= 0;
-            exe_bus_reg.isJump        <= 0;
-            exe_bus_reg.mispredict    <= 0;
+            exe_alu_reg <= '{0, 0, 0, 0, 0};
+            exe_lsu_reg <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            exe_branch_reg <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
         end
         else begin
             // alu outputs
-            exe_bus_reg.alu_rob_id   <= exe_bus.alu_rob_id;
-            exe_bus_reg.alu_result   <= exe_bus.alu_result;
-            exe_bus_reg.rd_phy_alu   <= exe_bus.rd_phy_alu;
-            exe_bus_reg.alu_valid    <= exe_bus.alu_valid;
-            // Store outputs
-            exe_bus_reg.store_waddr  <= exe_bus.store_waddr;
-            exe_bus_reg.store_wdata  <= exe_bus.store_wdata;
-            exe_bus_reg.store_rob_id <= exe_bus.store_rob_id;
-            exe_bus_reg.store_valid  <= exe_bus.store_valid;
-
-            // Load outputs
-            exe_bus_reg.load_funct3  <= exe_bus.load_funct3;
-            exe_bus_reg.load_raddr   <= exe_bus.load_raddr;
-            exe_bus_reg.load_rob_id  <= exe_bus.load_rob_id;
-            exe_bus_reg.load_rd_phy  <= exe_bus.load_rd_phy;
-            exe_bus_reg.load_valid   <= exe_bus.load_valid;
-            // Branch outputs
-            exe_bus_reg.branch_valid  <= exe_bus.branch_valid;
-            exe_bus_reg.branch_rob_id <= exe_bus.branch_rob_id;
-            exe_bus_reg.actual_taken  <= exe_bus.actual_taken;
-            exe_bus_reg.mispredict    <= exe_bus.mispredict;
-            exe_bus_reg.actual_target <= exe_bus.actual_target;
-            exe_bus_reg.update_pc     <= exe_bus.update_pc;
-            exe_bus_reg.nextPC        <= exe_bus.nextPC;
-            exe_bus_reg.rd_phy_branch <= exe_bus.rd_phy_branch;
-            exe_bus_reg.isJump        <= exe_bus.isJump;
-        end  
+            exe_alu_reg <= exe_alu;
+            // lsu outputs
+            exe_lsu_reg <= exe_lsu;
+            // branch outputs
+            exe_branch_reg <= exe_branch;
+        end
         
     end
+
+
+    logic [$clog2(FIFO_DEPTH)-1:0] store_id;
+    LoadStoreQueue #(.ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH), .FIFO_DEPTH(FIFO_DEPTH)) LSQ (
+        .clk(clk),
+        .rst(rst),
+        .flush(flush),
+        // Load & Store inputs
+        .exe_lsu(exe_lsu),
+        // writeback outputs
+        .wb_store(wb_store),
+        .wb_load(wb_load),
+        // ========= Memory Interface =================
+        // load
+        .mem_raddr(mem_raddr),
+        .mem_rd_en(mem_rd_en),
+        .mem_rdata(mem_rdata),
+        .mem_rdata_valid(mem_rdata_valid),
+        // ========= retire interface ==============
+        .retire_store_0(retire_bus_0_reg.retire_store_pkg),
+        .retire_store_1(retire_bus_1_reg.retire_store_pkg),
+        .mem_write_en(mem_write_en),
+        .mem_waddr(mem_waddr),
+        .mem_wdata(mem_wdata)
+    );
 
     // ============= Commit Stage ==================
 
@@ -358,90 +326,32 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .rst(rst),
         .flush(flush),
         // ============== from Execution (enqueue candidates) =================
-        .exe_to_wb_bus(exe_bus_reg),
+        .exe_alu(exe_alu_reg),
+        .exe_branch(exe_branch_reg),
         // ========== Physical Register & ROB Commit Interface  ===========
-        .wb_bus(wb_bus),
-        // ========== Retire Interface ===========
-        // Memory Interface
-        .mem_rd_en(mem_rd_en),
-        .mem_raddr(mem_raddr),
-        .mem_rdata(mem_rdata),
-        .mem_rdata_valid(mem_rdata_valid),
-        // Retire Interface
-        .retire_store_bus_0(retire_bus_0_reg.retire_store_sink),
-        .retire_store_bus_1(retire_bus_1_reg.retire_store_sink),
-        .mem_write_en(mem_write_en),
-        .mem_waddr(mem_waddr),
-        .mem_wdata(mem_wdata)
+        .wb_alu(wb_alu),
+        .wb_branch(wb_branch)
     );
 
 
     always_ff @(posedge clk or posedge rst) begin
         if (rst)begin
-            wb_bus_reg.alu_valid    <= 1'b0;
-            wb_bus_reg.alu_rob_id   <= 'h0;
-            wb_bus_reg.rd_alu       <= 'h0;
-            wb_bus_reg.alu_result   <= 'h0;
-            wb_bus_reg.load_valid   <= 1'b0;
-            wb_bus_reg.load_rob_id  <= 'h0;
-            wb_bus_reg.rd_load      <= 'h0;
-            wb_bus_reg.load_rdata   <= 'h0;
-            wb_bus_reg.store_valid  <= 'h0;
-            wb_bus_reg.store_rob_id <= 'h0;
-            wb_bus_reg.store_id     <= 'h0;
-            wb_bus_reg.branch_valid <= 'h0;
-            wb_bus_reg.jump_valid   <= 'h0;
-            wb_bus_reg.branch_rob_id<= 'h0;
-            wb_bus_reg.rd_branch    <= 'h0;
-            wb_bus_reg.nextPC       <= 'h0;
-            wb_bus_reg.mispredict   <= 'h0;
-            wb_bus_reg.actual_target<= 'h0;
-            wb_bus_reg.actual_taken <= 'h0;
-            wb_bus_reg.update_pc    <= 'h0;
+            wb_alu_reg    <= '{0, 0, 0, 0};
+            wb_store_reg  <= '{0, 0, 0};
+            wb_load_reg   <= '{0, 0, 0, 0};
+            wb_branch_reg <= '{0, 0, 0, 0, 0, 0, 0, 0, 0};
         end
         else if(flush)begin
-            wb_bus_reg.alu_valid    <= 1'b0;
-            wb_bus_reg.alu_rob_id   <= 'h0;
-            wb_bus_reg.rd_alu       <= 'h0;
-            wb_bus_reg.alu_result   <= 'h0;
-            wb_bus_reg.load_valid   <= 1'b0;
-            wb_bus_reg.load_rob_id  <= 'h0;
-            wb_bus_reg.rd_load      <= 'h0;
-            wb_bus_reg.load_rdata   <= 'h0;
-            wb_bus_reg.store_valid  <= 'h0;
-            wb_bus_reg.store_rob_id <= 'h0;
-            wb_bus_reg.store_id     <= 'h0;
-            wb_bus_reg.branch_valid <= 'h0;
-            wb_bus_reg.jump_valid   <= 'h0;
-            wb_bus_reg.branch_rob_id<= 'h0;
-            wb_bus_reg.rd_branch    <= 'h0;
-            wb_bus_reg.nextPC       <= 'h0;
-            wb_bus_reg.mispredict   <= 'h0;
-            wb_bus_reg.actual_target<= 'h0;
-            wb_bus_reg.actual_taken <= 'h0;
-            wb_bus_reg.update_pc    <= 'h0;
+            wb_alu_reg    <= '{0, 0, 0, 0};
+            wb_store_reg  <= '{0, 0, 0};
+            wb_load_reg   <= '{0, 0, 0, 0};
+            wb_branch_reg <= '{0, 0, 0, 0, 0, 0, 0, 0, 0};
         end
         else begin
-            wb_bus_reg.alu_valid    <= wb_bus.alu_valid;
-            wb_bus_reg.alu_rob_id   <= wb_bus.alu_rob_id;
-            wb_bus_reg.rd_alu       <= wb_bus.rd_alu;
-            wb_bus_reg.alu_result   <= wb_bus.alu_result;
-            wb_bus_reg.load_valid   <= wb_bus.load_valid;
-            wb_bus_reg.load_rob_id  <= wb_bus.load_rob_id;
-            wb_bus_reg.rd_load      <= wb_bus.rd_load;
-            wb_bus_reg.load_rdata   <= wb_bus.load_rdata;
-            wb_bus_reg.store_valid  <= wb_bus.store_valid;
-            wb_bus_reg.store_rob_id <= wb_bus.store_rob_id;
-            wb_bus_reg.store_id     <= wb_bus.store_id;
-            wb_bus_reg.branch_valid <= wb_bus.branch_valid;
-            wb_bus_reg.jump_valid   <= wb_bus.jump_valid;
-            wb_bus_reg.branch_rob_id<= wb_bus.branch_rob_id;
-            wb_bus_reg.rd_branch    <= wb_bus.rd_branch;
-            wb_bus_reg.nextPC       <= wb_bus.nextPC;
-            wb_bus_reg.mispredict   <= wb_bus.mispredict;
-            wb_bus_reg.actual_target<= wb_bus.actual_target;
-            wb_bus_reg.actual_taken <= wb_bus.actual_taken;
-            wb_bus_reg.update_pc    <= wb_bus.update_pc;
+            wb_alu_reg    <= wb_alu;
+            wb_store_reg  <= wb_store;
+            wb_load_reg   <= wb_load;
+            wb_branch_reg <= wb_branch;
         end
     end
 
@@ -487,7 +397,10 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .rob_id_0(rob_id_0),
         .rob_entry_1(rob_entry_1),
         .rob_id_1(rob_id_1),
-        .wb_to_rob_bus(wb_bus_reg.sink),
+        .wb_alu(wb_alu_reg),
+        .wb_store(wb_store_reg),
+        .wb_load(wb_load_reg),
+        .wb_branch(wb_branch_reg),
         // outputs to backend/architectural state
         .rob_status(rob_status.source)
     );
@@ -602,7 +515,9 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .lsu_prf_bus(lsu_prf_bus.sink),
         .branch_prf_bus(branch_prf_bus.sink),
         // =========== writeback interface =================
-        .wb_to_prf_bus(wb_bus_reg.sink),
+        .wb_alu(wb_alu_reg),
+        .wb_load(wb_load_reg),
+        .wb_branch(wb_branch_reg),
         // from retire stage
         // =========== commit interface =================
         .retire_pr_bus_0(retire_bus_0_reg.retire_pr_sink),

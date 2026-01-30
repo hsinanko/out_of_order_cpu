@@ -6,22 +6,12 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     input clk,
     input rst,
     input flush,
-    // Store inputs
-    input logic [ADDR_WIDTH-1:0] store_waddr, 
-    input logic [DATA_WIDTH-1:0] store_wdata,
-    input logic [ROB_WIDTH-1:0]  store_rob_id,
-    input logic                  store_valid,
-    output logic [$clog2(FIFO_DEPTH)-1:0] store_id,
-    // Load inputs
-    input logic [2:0]            load_funct3,
-    input logic [ADDR_WIDTH-1:0] load_raddr,
-    input logic [ROB_WIDTH-1:0]  load_rob_id,
-    input logic [PHY_WIDTH-1:0]  load_rd_phy,
-    input logic                  load_valid,
-    output logic [DATA_WIDTH-1:0] wb_load_valid,
-    output logic [ROB_WIDTH-1:0]  wb_load_rob_id,
-    output logic [DATA_WIDTH-1:0] wb_load_rdata,
-    output logic [PHY_WIDTH-1:0]  wb_rd_load,
+    // load & Store inputs
+    input EXE_lsu_t exe_lsu,
+    // store outpus
+    output WB_store_t wb_store,
+    // Load outputs
+    output WB_load_t wb_load,
     // ========= Memory Interface =================
     // load
     output logic [ADDR_WIDTH-1:0] mem_raddr,
@@ -29,8 +19,8 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     input  logic [DATA_WIDTH-1:0] mem_rdata,
     input  logic                  mem_rdata_valid,
     // ========= retire interface ==============
-    retire_if.retire_store_sink   retire_store_bus_0,
-    retire_if.retire_store_sink   retire_store_bus_1,
+    input  RETIRE_STORE_t retire_store_0,
+    input  RETIRE_STORE_t retire_store_1,
     // store
     output logic                  mem_write_en,
     output logic [ADDR_WIDTH-1:0] mem_waddr,
@@ -56,7 +46,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     assign store_full = (store_count == FIFO_DEPTH);
     assign store_empty = (store_count == 0);   
     
-    assign isStore = store_valid && !store_full;
+    assign isStore = exe_lsu.store_valid && !store_full;
     assign isRetire = retire_store_valid && !store_empty;
 
     always_ff@(posedge clk or posedge rst) begin
@@ -66,7 +56,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
         else if(flush)begin
             current_age <= 0;
         end
-        else if(load_valid || store_valid) begin
+        else if(exe_lsu.load_valid || exe_lsu.store_valid) begin
             current_age <= current_age + 1;
         end
         else
@@ -80,12 +70,11 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id, retire_store_id_0, retire_store_id_1;
     logic retire_store_valid, retire_store_valid_0, retire_store_valid_1;
 
-    assign retire_store_id_0  = retire_store_bus_0.retire_store_pkg.retire_store_id;
-    assign retire_store_valid_0 = retire_store_bus_0.retire_store_pkg.retire_store_valid;
+    assign retire_store_id_0  = retire_store_0.retire_store_id;
+    assign retire_store_valid_0 = retire_store_0.retire_store_valid;
 
-    assign retire_store_id_1  = retire_store_bus_1.retire_store_pkg.retire_store_id;
-    assign retire_store_valid_1 = retire_store_bus_1.retire_store_pkg.retire_store_valid;
-
+    assign retire_store_id_1  = retire_store_1.retire_store_id;
+    assign retire_store_valid_1 = retire_store_1.retire_store_valid;
 
     assign retire_store_valid = retire_store_valid_0 || retire_store_valid_1;
     assign retire_store_id    = (retire_store_valid_0) ? retire_store_id_0 : retire_store_id_1;
@@ -103,7 +92,10 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
         .retire_entry(retire_store_id) 
     );
 
-    assign store_id = (isStore) ? free_store_id : 'hx;
+    assign wb_store.store_valid = (isStore) ? 1'b1 : 1'b0;
+    assign wb_store.store_rob_id = (isStore) ? exe_lsu.store_rob_id : 'hx;
+    assign wb_store.store_id = (isStore) ? free_store_id : 'hx;
+
     always_ff @(posedge clk or posedge rst) begin
         if(rst) begin
             for(i = 0; i < FIFO_DEPTH; i = i + 1) begin
@@ -127,11 +119,11 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
             mem_wdata    <= 'h0;
         end
         else begin
-            if(store_valid) begin
+            if(isStore) begin
                 StoreQueue[free_store_id].age   <= current_age;
-                StoreQueue[free_store_id].addr  <= store_waddr;
-                StoreQueue[free_store_id].data  <= store_wdata;
-                StoreQueue[free_store_id].valid <= 1'b1;
+                StoreQueue[free_store_id].addr  <= exe_lsu.store_waddr;
+                StoreQueue[free_store_id].data  <= exe_lsu.store_wdata;
+                StoreQueue[free_store_id].valid <= exe_lsu.store_valid;
             end
 
             if(retire_store_valid_0) begin
@@ -170,7 +162,7 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
 
     // ========== Load Queue Management ==========
 
-    assign isLoad  = load_valid && !load_full;
+    assign isLoad  = exe_lsu.load_valid && !load_full;
     assign isSend  = mem_rdata_valid && !load_empty;
 
     assign load_full = (load_count == FIFO_DEPTH);
@@ -208,11 +200,11 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
             if(isLoad) begin
                 tail_load <= tail_load + 1;
                 LoadQueue[tail_load].age    <= current_age;
-                LoadQueue[tail_load].addr   <= load_raddr;
+                LoadQueue[tail_load].addr   <= exe_lsu.load_raddr;
                 LoadQueue[tail_load].data   <= 0; // data to be filled on memory response
-                LoadQueue[tail_load].funct3 <= load_funct3;
-                LoadQueue[tail_load].rob_id <= load_rob_id;
-                LoadQueue[tail_load].rd_phy <= load_rd_phy;
+                LoadQueue[tail_load].funct3 <= exe_lsu.load_funct3;
+                LoadQueue[tail_load].rob_id <= exe_lsu.load_rob_id;
+                LoadQueue[tail_load].rd_phy <= exe_lsu.load_rd_phy;
                 LoadQueue[tail_load].valid  <= 1'b0;
             end
 
@@ -283,36 +275,36 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
             IDLE: begin
                 mem_rd_en   = 1'b0;
                 mem_raddr   = 'h0;
-                wb_load_valid = 1'b0;
-                wb_load_rob_id = 'h0;
-                wb_load_rdata  = 'h0;
-                wb_rd_load     = 'h0;
+                wb_load.load_valid = 1'b0;
+                wb_load.load_rob_id = 'h0;
+                wb_load.load_rdata  = 'h0;
+                wb_load.rd_load     = 'h0;
             end
             CHECK: begin
                 LoadEntry= load_entry(LoadQueue[head_load]);
                 mem_rd_en = 1'b1;
                 mem_raddr = LoadEntry.addr;
-                wb_load_valid  = 1'b0;
-                wb_load_rob_id = 'h0;
-                wb_load_rdata  = 'h0;
-                wb_rd_load     = 'h0;
+                wb_load.load_valid  = 1'b0;
+                wb_load.load_rob_id = 'h0;
+                wb_load.load_rdata  = 'h0;
+                wb_load.rd_load     = 'h0;
                 
             end
             SEND: begin
                 mem_rd_en = 1'b0;
                 mem_raddr = 'h0;
-                wb_load_valid  = 1'b1;
-                wb_load_rob_id = LoadEntry.rob_id;
-                wb_rd_load     = LoadEntry.rd_phy;
-                wb_load_rdata  = LoadEntry.data;
+                wb_load.load_valid  = 1'b1;
+                wb_load.load_rob_id = LoadEntry.rob_id;
+                wb_load.rd_load     = LoadEntry.rd_phy;
+                wb_load.load_rdata  = LoadEntry.data;
             end
             WAIT: begin
                 mem_rd_en = 1'b0;
                 mem_raddr = 'h0;
-                wb_load_valid  = 1'b0;
-                wb_load_rob_id = 'h0;
-                wb_load_rdata  = 'h0;
-                wb_rd_load     = 'h0;
+                wb_load.load_valid  = 1'b0;
+                wb_load.load_rob_id = 'h0;
+                wb_load.load_rdata  = 'h0;
+                wb_load.rd_load     = 'h0;
                 if(mem_rdata_valid) begin
                     memory_index = LoadEntry.addr[1:0];
                     case(LoadEntry.funct3)
@@ -342,10 +334,10 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
             default: begin
                 mem_rd_en      = 1'b0;
                 mem_raddr      = 'h0;
-                wb_load_valid  = 1'b0;
-                wb_load_rob_id = 'h0;
-                wb_load_rdata  = 'h0;
-                wb_rd_load     = 'h0;
+                wb_load.load_valid  = 1'b0;
+                wb_load.load_rob_id = 'h0;
+                wb_load.load_rdata  = 'h0;
+                wb_load.rd_load     = 'h0;
             end
         endcase
     end
