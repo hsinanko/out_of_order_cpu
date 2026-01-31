@@ -54,10 +54,9 @@ module Retire #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, NUM_ROB_ENTRY = 32, 
 
 
     logic retire_second_block;
-    assign retire_second_block = 1 || ((isStore_0 && isStore_1) ||
-                                 (isBranch_0 && isBranch_1) ||
-                                 (isJump_0 && isJump_1) ||
-                                 (isSystem_0 && isSystem_1));
+    assign retire_second_block = //1 || (isStore_0 && isStore_1) ||
+                                 ((isBranch_0) ||
+                                 (isJump_0));
 
     always_comb begin
         if(flush) 

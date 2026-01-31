@@ -30,6 +30,11 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     logic [ROB_WIDTH:0] count;
     logic [ROB_WIDTH-1:0] head;
     logic [ROB_WIDTH-1:0] tail;
+
+    logic [ROB_WIDTH-1:0] head_tmp;
+    logic [ROB_WIDTH-1:0] tail_tmp;
+    logic [ROB_WIDTH:0] count_tmp;
+    
     
     assign rob_id_0 = (rob_entry_0.valid) ? tail : {ROB_WIDTH{1'b0}};
     assign rob_id_1 = (rob_entry_1.valid) ? ((rob_entry_0.valid) ? tail + 4'd1 : tail) : {ROB_WIDTH{1'b0}};
@@ -41,76 +46,88 @@ module ReorderBuffer #(parameter NUM_ROB_ENTRY = 16, ROB_WIDTH = 4, PHY_WIDTH = 
     assign rob_status.rob_full = (count >= NUM_ROB_ENTRY-2);
     assign rob_status.rob_empty = (count == 0);
     
+
+    always_comb begin
+        head_tmp  = head;
+        tail_tmp  = tail;
+        count_tmp = count;
+
+        if(rst || flush) begin
+            head_tmp  = 0;
+            tail_tmp  = 0;
+            count_tmp = 0;
+        end
+        else begin
+            // on dispatching new instructions
+            if(rob_entry_0.valid && rob_entry_1.valid) begin
+                tail_tmp  = tail_tmp + 2;
+                count_tmp = count_tmp + 2;
+            end
+            else if(rob_entry_0.valid && !rob_entry_1.valid) begin
+                tail_tmp  = tail_tmp + 1;
+                count_tmp = count_tmp + 1;
+            end
+            else if(!rob_entry_0.valid && rob_entry_1.valid) begin
+                tail_tmp  = tail_tmp + 1;
+                count_tmp = count_tmp + 1;
+            end
+
+            // on committing instructions
+            if(ROB_FINISH[head]) begin
+                if(rob_status.retire_num == 2) begin
+                    head_tmp = head_tmp + 2;
+                    count_tmp = count_tmp - 2;
+                end
+                else begin
+                    head_tmp = head_tmp + 1;
+                    count_tmp = count_tmp - 1;
+                end
+            end
+        end
+    end
     always_ff @(posedge clk or posedge rst)begin
         if(rst)begin
             for(i = 0; i < NUM_ROB_ENTRY; i = i + 1)begin
-                ROB[i].rd_arch        <= 'h0;
-                ROB[i].rd_phy_old     <= 'h0;
-                ROB[i].rd_phy_new     <= 'h0;
-                ROB[i].opcode         <= 'h0;
-                ROB[i].actual_target  <= 'h0;
-                ROB[i].actual_taken   <= 1'b0;
-                ROB[i].update_pc      <= 'h0;
-                ROB[i].mispredict     <= 1'b0;
-                ROB[i].store_id       <= 'h0;
-                ROB[i].valid          <= 1'b0;
-                // debugging info
-                ROB[i].addr           <= 'h0;
+                ROB[i] <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
             end
+            head  <= 0;
             count <= 0;
             tail  <= 0;
         end
         else if(flush)begin
+            for(i = 0; i < NUM_ROB_ENTRY; i = i + 1)begin
+                ROB[i] <= '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            end
+            head  <= 0;
             tail  <= 0;
             count <= 0;
         end
-        else if(rob_entry_0.valid && rob_entry_1.valid)begin
-            ROB[tail]   <= rob_entry_0;
-            ROB[tail+1] <= rob_entry_1;
-            tail      <= tail + 2;
-            count     <= count + 2;
-        end
-        else if(rob_entry_0.valid && !rob_entry_1.valid)begin
-            ROB[tail] <= rob_entry_0;
-            tail      <= tail + 1;
-            count     <= count + 1;
-        end
-        else if(!rob_entry_0.valid && rob_entry_1.valid)begin
-            ROB[tail] <= rob_entry_1;
-            tail      <= tail + 1;
-            count     <= count + 1;
-        end
-        else if(ROB_FINISH[head]) begin
-            // when committing instructions
-            tail  <= tail;
-            count <= count - 1;
-        end
         else begin
-            tail  <= tail;
-            count <= count;
-        end
-    end
+            tail <= tail_tmp;
+            count <= count_tmp;
+            head <= head_tmp;
 
-    always_ff @(posedge clk or posedge rst)begin
-        if(rst)begin
-            head <= 0;
-        end
-        else if(flush) begin
-            head <= 0;
-        end
-        else if(ROB_FINISH[head]) begin
-            if(rob_status.retire_num == 2) begin
-                ROB_FINISH[head]   <= 1'b0;
-                ROB_FINISH[head+1] <= 1'b0;
-                head <= head + 2;
+            if(rob_entry_0.valid && rob_entry_1.valid)begin
+                ROB[tail]   <= rob_entry_0;
+                ROB[tail+1] <= rob_entry_1;
             end
-            else begin
-                ROB_FINISH[head] <= 1'b0;
-                head <= head + 1;
+            else if(rob_entry_0.valid && !rob_entry_1.valid)begin
+                ROB[tail] <= rob_entry_0;
             end
-        end
-        else begin 
-            head <= head;
+            else if(!rob_entry_0.valid && rob_entry_1.valid)begin
+                ROB[tail] <= rob_entry_1;
+            end
+
+
+            if(ROB_FINISH[head]) begin
+                if(rob_status.retire_num == 2) begin
+                    ROB_FINISH[head]   <= 1'b0;
+                    ROB_FINISH[head+1] <= 1'b0;
+                end
+                else begin
+                    ROB_FINISH[head] <= 1'b0;
+                end
+            end
         end
     end
 

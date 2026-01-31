@@ -32,7 +32,7 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
     // BTB Storage
     BTB_ENTRY_t btb [BTB_ENTRIES];
     BTB_ENTRY_t entry;
-    logic [BTB_WIDTH-1:0] index;
+    logic [BTB_WIDTH-1:0] index_0, index_1;
     logic [BTB_WIDTH-1:0] update_index_0, update_index_1;
 
     assign update_index_0 = update_btb_pc_0[BTB_WIDTH+1:2];
@@ -40,10 +40,10 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
     // Predict Logic
     always_comb begin
         if (pc_valid) begin
-            index = pc[BTB_WIDTH+1:2];
-            entry = btb[index];
-            if (entry.valid && entry.taken && entry.tag == pc[ADDR_WIDTH-1:BTB_WIDTH+2]) begin
-                predict_0.predict_taken = 1;
+            index_0 = pc[BTB_WIDTH+1:2];
+            entry = btb[index_0];
+            if (entry.valid && entry.tag == pc[ADDR_WIDTH-1:BTB_WIDTH+2]) begin
+                predict_0.predict_taken = entry.taken;
                 predict_0.predict_target = entry.target;
 
             end else begin
@@ -51,17 +51,18 @@ module BTB #(parameter ADDR_WIDTH = 32, BTB_ENTRIES = 16, BTB_WIDTH = $clog2(BTB
                 predict_0.predict_target = pc + 4;
             end
 
-            index = predict_0.predict_target[BTB_WIDTH+1:2];
-            entry = btb[index];
-            if (entry.valid && entry.taken && entry.tag == predict_0.predict_target[ADDR_WIDTH-1:BTB_WIDTH+2]) begin
-                predict_1.predict_taken = 1;
+            index_1 = predict_0.predict_target[BTB_WIDTH+1:2];
+            entry = btb[index_1];
+            if (entry.valid && entry.tag == predict_0.predict_target[ADDR_WIDTH-1:BTB_WIDTH+2]) begin
+                predict_1.predict_taken = entry.taken;
                 predict_1.predict_target = entry.target;
             end
             else begin
                 predict_1.predict_taken = 0;
                 predict_1.predict_target = predict_0.predict_target + 4;
             end
-        end else begin
+        end 
+        else begin
             predict_0.predict_taken = 0;
             predict_0.predict_target = pc + 4;
             predict_1.predict_taken = 0;

@@ -33,29 +33,7 @@ module CPU #(parameter ADDR_WIDTH = 32,
     assign isFlush = retire_bus_0_reg.isFlush || retire_bus_1_reg.isFlush;
     assign target_pc = (retire_bus_0_reg.isFlush) ? retire_bus_0_reg.targetPC : retire_bus_1_reg.targetPC;
     
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
-            flush <= 1'b0;
-        end
-        else if(isFlush)begin
-            flush <= 1'b1;
-            redirect_pc <= target_pc;
-        end
-        else begin
-            flush <= 1'b0;
-            redirect_pc <= 'h0;
-        end
-    end
 
-    
-    always_ff @(posedge clk or posedge rst)begin
-        if(rst)
-            done <= 1'b0;
-        else if(done_valid && !flush)
-            done <= 1'b1;
-        else
-            done <= done;
-    end
     // ============= Instruction Fetch ===================
 
     logic [ADDR_WIDTH-1:0]pc;
@@ -105,8 +83,7 @@ module CPU #(parameter ADDR_WIDTH = 32,
     // ============ Back RAT ==================
     logic [PHY_WIDTH*ARCH_REGS-1:0]back_rat;
     // ============= Control Unit ==================
-    logic stall_fetch;
-    logic stall_dispatch;
+    logic stall;
     // ================== Data Memory Interface (in the Unified Memory) ==================
     // memory port
     logic mem_rd_en;
@@ -119,16 +96,39 @@ module CPU #(parameter ADDR_WIDTH = 32,
     // ============ Reorder Buffer ==================
     rob_status_if #(NUM_ROB_ENTRY, ROB_WIDTH)rob_status ();
     // ============= Retire Stage ==================
-    logic done_valid;
+    
     retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus_0();
     retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus_1();
     retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus_0_reg();
     retire_if #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH)retire_bus_1_reg();
     
-    assign done_valid = retire_bus_0_reg.retire_done_valid || retire_bus_1_reg.retire_done_valid;
+    logic store_full, store_empty;
+    RETIRE_STORE_t retire_store;
 
+    logic done_valid;
+    assign done_valid = retire_bus_0_reg.retire_done_valid || retire_bus_1_reg.retire_done_valid;
+    
     //============ Free List ==================
     logic free_list_full, free_list_empty;
+
+    //============== Control Unit ==================
+    Control #(ADDR_WIDTH) Control_Unit(
+        .clk(clk),
+        .rst(rst),
+        .isFlush(isFlush),
+        .target_pc(target_pc),
+        .store_empty(store_empty),   
+        .flush(flush),
+        .redirect_pc(redirect_pc),
+        .rob_full(rob_status.rob_full),
+        .rob_empty(rob_status.rob_empty),
+        .pc_valid(pc_valid),
+        .free_list_full(free_list_full),
+        .free_list_empty(free_list_empty),
+        .stall(stall),
+        .done_valid(done_valid),
+        .done(done)
+    );
     //============== Unified Instruction/Data Memory ==================
     
     Memory #(INSTR_ADDRESS, DATA_ADDRESS, INSTR_MEM_SIZE, DATA_MEM_SIZE, ADDR_WIDTH, DATA_WIDTH) UnifiedMemory(
@@ -173,7 +173,7 @@ module CPU #(parameter ADDR_WIDTH = 32,
             predict_0_reg          <= '{0, 0};
             predict_1_reg          <= '{0, 0};
         end
-        else if(stall_fetch)begin
+        else if(stall)begin
             pc                     <= pc;
             instruction_0_reg      <= instruction_0_reg;
             instruction_1_reg      <= instruction_1_reg;
@@ -199,7 +199,7 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .rst(rst),
         .flush(flush),
         .PRF_valid(PRF_valid),
-        .stall_dispatch(stall_dispatch),
+        .stall_dispatch(stall),
         //======== Instruction Fetch =============================
         .instruction_0(instruction_0_reg),
         .instruction_1(instruction_1_reg),
@@ -294,8 +294,6 @@ module CPU #(parameter ADDR_WIDTH = 32,
         
     end
 
-
-    logic [$clog2(FIFO_DEPTH)-1:0] store_id;
     LoadStoreQueue #(.ADDR_WIDTH(ADDR_WIDTH), .DATA_WIDTH(DATA_WIDTH), .FIFO_DEPTH(FIFO_DEPTH)) LSQ (
         .clk(clk),
         .rst(rst),
@@ -312,14 +310,13 @@ module CPU #(parameter ADDR_WIDTH = 32,
         .mem_rdata(mem_rdata),
         .mem_rdata_valid(mem_rdata_valid),
         // ========= retire interface ==============
-        .retire_store_0(retire_bus_0_reg.retire_store_pkg),
-        .retire_store_1(retire_bus_1_reg.retire_store_pkg),
+        .retire_store(retire_store),
         .mem_write_en(mem_write_en),
         .mem_waddr(mem_waddr),
         .mem_wdata(mem_wdata)
     );
 
-    // ============= Commit Stage ==================
+    // ============= WriteBack Stage ==================
 
     WriteBack #(ADDR_WIDTH, DATA_WIDTH, PHY_WIDTH, ROB_WIDTH, FIFO_DEPTH) WriteBack_Unit(
         .clk(clk),
@@ -356,54 +353,7 @@ module CPU #(parameter ADDR_WIDTH = 32,
     end
 
 
-    // ============= Common ==================
-    Front_RAT #(ARCH_REGS, PHY_WIDTH) front_rat (
-        .clk(clk),
-        .rst(rst),
-        .flush(flush),
-        .done(done_valid),
-        .rat_0_bus(rename_0.rat_sink),
-        .rat_1_bus(rename_1.rat_sink),
-        .freelist_0_bus(rename_0.freelist_sink),
-        .freelist_1_bus(rename_1.freelist_sink),
-        // BACK_RAT will handle commit updates
-        .back_rat(back_rat),
-        .front_rat_out(debug_info.front_rat_out)
-    );
-
-    Freelist #(ARCH_REGS, PHY_REGS, PHY_WIDTH, FREE_REG) free_list(
-        .clk(clk),
-        .rst(rst),
-        .flush(flush),
-        .full(free_list_full),
-        .empty(free_list_empty),
-        .done(done_valid),
-        // rename interface to allocate physical registers
-        .freelist_0_bus(rename_0.freelist_sink),
-        .freelist_1_bus(rename_1.freelist_sink),
-        // retire
-        // commit interface to free physical registers
-        .retire_pr_bus_0(retire_bus_0_reg.retire_pr_sink),
-        .retire_pr_bus_1(retire_bus_1_reg.retire_pr_sink)
-    );
-
-    logic [ROB_WIDTH-1:0] rob_debug;
-    logic [ROB_WIDTH-1:0] rob_debug_reg;
-    ReorderBuffer #(NUM_ROB_ENTRY, ROB_WIDTH, PHY_WIDTH, FIFO_DEPTH) ROB_Unit(
-        .clk(clk),
-        .rst(rst),
-        .flush(flush),
-        .rob_entry_0(rob_entry_0),
-        .rob_id_0(rob_id_0),
-        .rob_entry_1(rob_entry_1),
-        .rob_id_1(rob_id_1),
-        .wb_alu(wb_alu_reg),
-        .wb_store(wb_store_reg),
-        .wb_load(wb_load_reg),
-        .wb_branch(wb_branch_reg),
-        // outputs to backend/architectural state
-        .rob_status(rob_status.source)
-    );
+    // ============= Retire Stage ==================
 
     Retire #(ADDR_WIDTH, DATA_WIDTH, NUM_ROB_ENTRY, FIFO_DEPTH) Retire_Unit(
         .clk(clk),
@@ -478,33 +428,91 @@ module CPU #(parameter ADDR_WIDTH = 32,
         end
     end
 
+
+
+    // ============= Common ==================
+    Front_RAT #(ARCH_REGS, PHY_WIDTH) front_rat (
+        .clk(clk),
+        .rst(rst),
+        .flush(flush),
+        .done(done),
+        .rat_0_bus(rename_0.rat_sink),
+        .rat_1_bus(rename_1.rat_sink),
+        .freelist_0_bus(rename_0.freelist_sink),
+        .freelist_1_bus(rename_1.freelist_sink),
+        // BACK_RAT will handle commit updates
+        .back_rat(back_rat),
+        .front_rat_out(debug_info.front_rat_out)
+    );
+
+    Freelist #(ARCH_REGS, PHY_REGS, PHY_WIDTH, FREE_REG) free_list(
+        .clk(clk),
+        .rst(rst),
+        .flush(flush),
+        .full(free_list_full),
+        .empty(free_list_empty),
+        .done(done),
+        // rename interface to allocate physical registers
+        .freelist_0_bus(rename_0.freelist_sink),
+        .freelist_1_bus(rename_1.freelist_sink),
+        // retire
+        // commit interface to free physical registers
+        .retire_pr_bus_0(retire_bus_0_reg.retire_pr_sink),
+        .retire_pr_bus_1(retire_bus_1_reg.retire_pr_sink)
+    );
+
+    logic [ROB_WIDTH-1:0] rob_debug;
+    logic [ROB_WIDTH-1:0] rob_debug_reg;
+    ReorderBuffer #(NUM_ROB_ENTRY, ROB_WIDTH, PHY_WIDTH, FIFO_DEPTH) ROB_Unit(
+        .clk(clk),
+        .rst(rst),
+        .flush(flush),
+        .rob_entry_0(rob_entry_0),
+        .rob_id_0(rob_id_0),
+        .rob_entry_1(rob_entry_1),
+        .rob_id_1(rob_id_1),
+        .wb_alu(wb_alu_reg),
+        .wb_store(wb_store_reg),
+        .wb_load(wb_load_reg),
+        .wb_branch(wb_branch_reg),
+        // outputs to backend/architectural state
+        .rob_status(rob_status.source)
+    );
+
+
+    // ============= Store Buffer ==================
+
+    StoreBuffer #(DATA_WIDTH, FIFO_DEPTH) Store_Buffer(
+        .clk(clk),
+        .rst(rst),
+        .flush(flush),
+        .done(done),
+        .store_full(store_full),
+        .store_empty(store_empty),
+        .retire_store_0(retire_bus_0_reg.retire_store_pkg),
+        .retire_store_1(retire_bus_1_reg.retire_store_pkg),
+        .retire_store(retire_store)
+    );
+
+    // ============= Back RAT ==================
+
     Back_RAT #(ARCH_REGS, PHY_WIDTH) Back_RAT_Unit(
         .clk(clk),
         .rst(rst),
         .flush(flush),
+        .done(done),
         .retire_pr_bus_0(retire_bus_0_reg.retire_pr_sink),
         .retire_pr_bus_1(retire_bus_1_reg.retire_pr_sink),
         .back_rat(back_rat)
     );
 
-    Control Control_Unit(
-        .clk(clk),
-        .rst(rst),
-        .flush(flush),
-        .rob_full(rob_status.rob_full),
-        .rob_empty(rob_status.rob_empty),
-        .pc_valid(pc_valid),
-        .free_list_full(free_list_full),
-        .free_list_empty(free_list_empty),
-        .stall_fetch(stall_fetch),
-        .stall_dispatch(stall_dispatch)
-    );
+    // ============= Physical Register File ==================
 
     PhysicalRegister #(PHY_REGS, PHY_WIDTH, DATA_WIDTH) PhysicalRegisterFile(
         .clk(clk),
         .rst(rst),
         .flush(flush),
-        .done(done_valid),
+        .done(done),
         .busy_valid(busy_valid),
         .rd_phy_busy_0(rd_phy_busy_0),
         .rd_phy_busy_1(rd_phy_busy_1),
@@ -546,9 +554,9 @@ module CPU #(parameter ADDR_WIDTH = 32,
 
     assign debug_info.back_rat_out = back_rat;
     assign debug_info.retire_addr_0_reg  = (flush) ? 'hx : retire_bus_0_reg.retire_addr;
-    assign debug_info.retire_valid_0_reg = (flush) ? 1'b0 : (retire_pr_0_debug.retire_pr_valid || retire_store_0_debug.retire_store_valid || retire_branch_0_debug.retire_branch_valid);
+    assign debug_info.retire_valid_0_reg = (flush) ? 1'b0 : (retire_pr_0_debug.retire_pr_valid || retire_store_0_debug.retire_store_valid || retire_branch_0_debug.retire_branch_valid || retire_bus_0_reg.retire_done_valid);
     assign debug_info.retire_addr_1_reg  = (flush) ? 'h0 : retire_bus_1_reg.retire_addr;
-    assign debug_info.retire_valid_1_reg = (flush) ? 1'b0 : (retire_pr_1_debug.retire_pr_valid || retire_store_1_debug.retire_store_valid || retire_branch_1_debug.retire_branch_valid);
+    assign debug_info.retire_valid_1_reg = (flush) ? 1'b0 : (retire_pr_1_debug.retire_pr_valid || retire_store_1_debug.retire_store_valid || retire_branch_1_debug.retire_branch_valid || retire_bus_1_reg.retire_done_valid);
     assign debug_info.retire_count = retire_count;
 
     

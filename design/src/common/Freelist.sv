@@ -36,7 +36,7 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
     logic [$clog2(FREE_REG)-1:0] tail;                         // points to the next allocated entry
     logic [$clog2(FREE_REG):0] num_free;                     // number of free entries
     
-    logic [$clog2(FREE_REG):0] head_tmp;
+    logic [$clog2(FREE_REG)-1:0] head_tmp;
     logic [$clog2(FREE_REG)-1:0] tail_tmp;
     logic [$clog2(FREE_REG):0] num_free_tmp;
 
@@ -60,6 +60,8 @@ module Freelist #(parameter ARCH_REGS = 32, PHY_REGS = 64, PHY_WIDTH = 6, FREE_R
                     tail_tmp = tail_tmp + 1;
                 end
             end
+            tail_tmp = FREE_REG - 1;
+            head_tmp = 0;
         end
         else begin
             num_free_tmp = num_free;

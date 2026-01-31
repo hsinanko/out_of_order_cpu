@@ -38,6 +38,8 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
     integer i;
     logic [DATA_WIDTH-1:0] PRF [0:PHY_REGS-1];
 
+    logic [PHY_REGS-1:0] PRF_busy_tmp;
+    logic [PHY_REGS-1:0] PRF_valid_tmp;
 
     logic retire_pr_valid_0, retire_pr_valid_1;
     logic [PHY_WIDTH-1:0] rd_arch_0, rd_arch_1;
@@ -101,67 +103,67 @@ module PhysicalRegister #(parameter PHY_REGS = 64, PHY_WIDTH = 6, DATA_WIDTH = 3
             PRF_busy  <= 'h0;
         end
         else begin
-            // =========== mark physical registers as busy ==================
-            if(busy_valid[0])begin
-                PRF_busy[rd_phy_busy_0]  <= 1;
-                PRF_valid[rd_phy_busy_0] <= 0;
-            end
-            if(busy_valid[1])begin
-                PRF_busy[rd_phy_busy_1]  <= 1;
-                PRF_valid[rd_phy_busy_1] <= 0;
-            end
+            PRF_busy  <= PRF_busy_tmp;
+            PRF_valid <= PRF_valid_tmp;
             // =========== writeback to PRF ==================
             if(wb_alu.alu_valid)begin
                 PRF[wb_alu.rd_alu]       <= wb_alu.alu_result;
-                PRF_valid[wb_alu.rd_alu] <= 1;
             end
             if(wb_load.load_valid)begin
                 PRF[wb_load.rd_load]       <= wb_load.load_rdata;
-                PRF_valid[wb_load.rd_load] <= 1;
-            end
-            if(wb_branch.jump_valid)begin
-                if(wb_branch.rd_branch != '0)begin
-                    PRF[wb_branch.rd_branch]       <= wb_branch.nextPC;
-                    PRF_valid[wb_branch.rd_branch] <= 1;
-                end
             end
             if(wb_branch.branch_valid)begin
-                PRF_valid[wb_branch.rd_branch] <= 1;
+                if(wb_branch.jump_valid )begin
+                    PRF[wb_branch.rd_branch] <= wb_branch.nextPC;
+                end
+            end
+
+        end
+    end
+
+
+    always_comb begin
+        PRF_busy_tmp = PRF_busy;
+        PRF_valid_tmp = PRF_valid;
+        if(flush || done) begin
+            PRF_busy_tmp = 'h0;
+        end
+        else begin
+            // =========== mark physical registers as busy ==================
+            if(busy_valid[0])begin
+                PRF_busy_tmp[rd_phy_busy_0]  = 1;
+                PRF_valid_tmp[rd_phy_busy_0] = 0;
+            end
+            if(busy_valid[1])begin
+                PRF_busy_tmp[rd_phy_busy_1]  = 1;
+                PRF_valid_tmp[rd_phy_busy_1] = 0;
+            end
+            // =========== writeback to PRF ==================
+            if(wb_alu.alu_valid)begin
+                PRF_valid_tmp[wb_alu.rd_alu] = 1;
+            end
+            if(wb_load.load_valid)begin
+                PRF_valid_tmp[wb_load.rd_load] = 1;
+            end
+            if(wb_branch.branch_valid)begin
+                if(wb_branch.jump_valid )begin
+                    PRF_valid_tmp[wb_branch.rd_branch] = 1;
+                end
             end
             // =========== free physical registers on retire ==========
             if(retire_pr_valid_0) begin
-                if(retire_pr_valid_1)begin
-                    PRF_busy[rd_phy_new_1]  <= 0;
-                    if(rd_phy_old_1 == rd_phy_new_0) begin
-                        // both instructions map to the same old physical register
-                        PRF_valid[rd_phy_old_1] <= 0;
-                    end
-                    else if(!PRF_busy[rd_phy_old_1]) begin
-                        PRF_valid[rd_phy_old_1] <= 0;
-                    end
-                end
-                else begin
-                    PRF_busy[rd_phy_new_0]  <= 0;
-                    if(!PRF_busy[rd_phy_old_0])begin
-                        PRF_valid[rd_phy_old_0] <= 0;
-                    end
+                PRF_busy_tmp[rd_phy_new_0]  = 0;
+                if(!PRF_busy[rd_phy_old_0])begin
+                    PRF_valid_tmp[rd_phy_old_0] = 0;
                 end
             end
-            else if(retire_pr_valid_1)begin
-                PRF_busy[rd_phy_new_1]  <= 0;
+
+            if(retire_pr_valid_1)begin
+                PRF_busy_tmp[rd_phy_new_1]  = 0;
                 if(!PRF_busy[rd_phy_old_1])begin
-                    PRF_valid[rd_phy_old_1] <= 0;
+                    PRF_valid_tmp[rd_phy_old_1] = 0;
                 end
             end
-            // if(retire_pr_valid_0) begin
-            //     if(!PRF_busy[rd_phy_old_0])begin
-            //         PRF_valid[rd_phy_old_0] <= 0;
-            //         PRF_busy[rd_phy_new_0]  <= 0;
-            //     end
-            //     else begin
-            //         PRF_busy[rd_phy_new_0]  <= 0;
-            //     end
-            // end
         end
     end
 

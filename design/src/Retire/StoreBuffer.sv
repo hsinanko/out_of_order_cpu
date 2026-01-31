@@ -7,105 +7,219 @@ module StoreBuffer #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH= 16)
     input logic rst,
     input logic flush,
     input logic done,
-    output logic full,
-    output logic empty,
+    output logic store_full,
+    output logic store_empty,
     // from wb stage
-    input MEM_WRITE_t mem_write_0,
-    input MEM_WRITE_t mem_write_1,
+    input  RETIRE_STORE_t retire_store_0,
+    input  RETIRE_STORE_t retire_store_1,
     // to memory stage
-    output logic mem_write_en,
-    output logic [ADDR_WIDTH-1:0]mem_waddr,
-    output logic [DATA_WIDTH-1:0]mem_wdata
+    output RETIRE_STORE_t retire_store
 );
 
-    logic [FIFO_DEPTH-1:0] is_full;
-    logic [FIFO_DEPTH-1:0] is_empty;
+    logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id_0, retire_store_id_1;
+    logic retire_store_valid_0, retire_store_valid_1;
 
-    MEM_WRITE_t store_buffer [0:FIFO_DEPTH-1];
+    assign retire_store_id_0  = retire_store_0.retire_store_id;
+    assign retire_store_valid_0 = retire_store_0.retire_store_valid;
+
+    assign retire_store_id_1  = retire_store_1.retire_store_id;
+    assign retire_store_valid_1 = retire_store_1.retire_store_valid;
+
+
+    RETIRE_STORE_t store_buffer [0:FIFO_DEPTH-1];
     logic [$clog2(FIFO_DEPTH)-1:0] head;
     logic [$clog2(FIFO_DEPTH)-1:0] tail;
     logic [$clog2(FIFO_DEPTH):0] num_entries;
 
-    MEM_WRITE_t store_buffer_tmp [0:FIFO_DEPTH-1];
+    RETIRE_STORE_t store_buffer_tmp [0:FIFO_DEPTH-1];
     logic [$clog2(FIFO_DEPTH)-1:0] head_tmp;
     logic [$clog2(FIFO_DEPTH)-1:0] tail_tmp;
     logic [$clog2(FIFO_DEPTH):0] num_entries_tmp;
 
-    assign is_full = (num_entries == FIFO_DEPTH);
-    assign is_empty = (num_entries == 0);
-    assign full  = is_full;
-    assign empty = is_empty;
+    assign store_full = (num_entries == FIFO_DEPTH);
+    assign store_empty = (num_entries == 0);
+
+
+    logic [1:0] state, next_state;
+    parameter EMPTY = 2'b00, NON_EMPTY = 2'b01, FLUSHING = 2'b10, DONE = 2'b11;
+
+
+    always_ff @(posedge clk or posedge rst) begin
+        if(rst)
+            state <= EMPTY;
+        else
+            state <= next_state;
+    end
+
+
     always_comb begin
-        head_tmp = head;
-        tail_tmp = tail;
-        num_entries_tmp = num_entries;
-        if(flush || done) begin
-            tail_tmp = 0;
-            num_entries_tmp = 0;
-        end
-        else begin
-            for(integer i = 0; i < FIFO_DEPTH; i = i + 1) begin
-                store_buffer_tmp[i] = store_buffer[i];
+        case(state)
+            EMPTY: begin
+                if(flush) begin
+                    next_state = FLUSHING;
+                end
+                else if(retire_store_valid_0 && retire_store_valid_1) begin
+                    next_state = NON_EMPTY;
+                end
+                else if(retire_store_valid_0 || retire_store_valid_1) begin
+                    next_state = EMPTY;
+                end
+                else begin
+                    next_state = EMPTY;
+                end
             end
-            head_tmp = head;
-            tail_tmp = tail;
-            num_entries_tmp = num_entries;
-            if(mem_write_0.mem_write_en)begin
-                store_buffer_tmp[tail_tmp] = mem_write_0;
-                tail_tmp = tail_tmp + 1;
-                num_entries_tmp = num_entries_tmp + 1;
+            NON_EMPTY: begin
+                if(flush) begin
+                    next_state = FLUSHING;
+                end
+                else if(retire_store_valid_0 || retire_store_valid_1) begin
+                    next_state = NON_EMPTY;
+                end
+                else if(!retire_store_valid_0 && !retire_store_valid_1) begin
+                    if(num_entries == 1) begin
+                        next_state = EMPTY;
+                    end
+                    else begin
+                        next_state = NON_EMPTY;
+                    end
+                end
+                else begin
+                    next_state = NON_EMPTY; 
+                end
             end
-            if(mem_write_1.mem_write_en)begin
-                store_buffer_tmp[tail_tmp] = mem_write_1;
-                tail_tmp = tail_tmp + 1;
-                num_entries_tmp = num_entries_tmp + 1;
+            FLUSHING: begin
+                if(num_entries == 1 || num_entries == 0) begin
+                    next_state = DONE;
+                end
+                else begin
+                    next_state = FLUSHING;
+                end
             end
+            DONE: begin
+                next_state = EMPTY;
+            end
+            default: begin
+                next_state = EMPTY;
+            end
+        endcase
+    end
 
-            if(!is_empty) begin
-                head_tmp = head + 1;
-                num_entries_tmp = num_entries_tmp - 1;
+    always_comb begin
+        case(state)
+            EMPTY: begin
+                if(flush) begin
+                    retire_store.retire_store_id = '0;
+                    retire_store.retire_store_valid = 1'b0;
+                end
+                else if(retire_store_valid_0 && retire_store_valid_1) begin
+                    retire_store.retire_store_id = retire_store_id_0;
+                    retire_store.retire_store_valid = retire_store_valid_0;
+                end
+                else if(retire_store_valid_0) begin
+                    retire_store.retire_store_id = retire_store_id_0;
+                    retire_store.retire_store_valid = retire_store_valid_0;
+                end
+                else if(retire_store_valid_1) begin
+                    retire_store.retire_store_id = retire_store_id_1;
+                    retire_store.retire_store_valid = retire_store_valid_1;
+                end
+                else begin
+                    retire_store.retire_store_id = '0;
+                    retire_store.retire_store_valid = 1'b0;
+                end
             end
-
-        end
+            NON_EMPTY: begin
+                retire_store.retire_store_id = store_buffer[head].retire_store_id;
+                retire_store.retire_store_valid = store_buffer[head].retire_store_valid;
+            end
+            FLUSHING: begin
+                retire_store.retire_store_id = store_buffer[head].retire_store_id;
+                retire_store.retire_store_valid = store_buffer[head].retire_store_valid;
+            end
+            default: begin
+                retire_store.retire_store_id = 'h0;
+                retire_store.retire_store_valid = 1'b0;
+            end
+        endcase
     end
 
     always_ff @(posedge clk or posedge rst) begin
         if(rst) begin
-            head         <= 0;
-            tail         <= 0;
-            num_entries  <= 0;
-            for(integer i = 0; i < FIFO_DEPTH; i = i + 1) begin
-                store_buffer[i] = '{0, 0, 0};
+            head <= '0;
+            tail <= '0;
+            num_entries <= '0;
+            for(int i = 0; i < FIFO_DEPTH; i = i + 1) begin
+                store_buffer[i] <= '0;
             end
         end
-        else if(flush || done) begin
-            head         <= 0;
-            tail         <= 0;
-            num_entries  <= 0;
-            store_buffer <= store_buffer_tmp;
-        end
         else begin
-            head         <= head_tmp;
-            tail         <= tail_tmp;
-            num_entries  <= num_entries_tmp;
-            store_buffer <= store_buffer_tmp;
-
+            head <= head_tmp;
+            tail <= tail_tmp;
+            num_entries <= num_entries_tmp;
+            for(int i = 0; i < FIFO_DEPTH; i = i + 1) begin
+                store_buffer[i] <= store_buffer_tmp[i];
+            end
         end
     end
+
 
     always_comb begin
-        if(!is_empty) begin
-            mem_write_en  = 1'b1;
-            mem_waddr     = store_buffer[head].mem_waddr;
-            mem_wdata     = store_buffer[head].mem_wdata;
+        head_tmp = head;
+        tail_tmp = tail;
+        num_entries_tmp = num_entries;
+        for(int i = 0; i < FIFO_DEPTH; i = i + 1) begin
+            store_buffer_tmp[i] <= store_buffer[i];
         end
-        else begin
-            mem_write_en  = 1'b0;
-            mem_waddr     = '0;
-            mem_wdata     = '0;
-        end
+
+        case(state)
+            EMPTY: begin
+                if(retire_store_valid_0 && retire_store_valid_1) begin
+                    store_buffer_tmp[tail_tmp] = retire_store_1;
+                    tail_tmp = tail_tmp + 1;
+                    num_entries_tmp = num_entries_tmp + 1;
+                end
+            end
+            NON_EMPTY: begin
+                if(retire_store_valid_0 && retire_store_valid_1) begin
+                    store_buffer_tmp[tail_tmp] = retire_store_0;
+                    tail_tmp = tail_tmp + 1;
+                    num_entries_tmp = num_entries_tmp + 1; 
+                    
+                    store_buffer_tmp[tail_tmp] = retire_store_1;
+                    tail_tmp = tail_tmp + 1;
+                    num_entries_tmp = num_entries_tmp + 1; 
+                end
+                else if(retire_store_valid_0) begin
+                    store_buffer_tmp[tail_tmp] = retire_store_0;
+                    tail_tmp = tail_tmp + 1;
+                    num_entries_tmp = num_entries_tmp + 1; 
+                end
+                else if(retire_store_valid_1) begin
+                    store_buffer_tmp[tail_tmp] = retire_store_1;
+                    tail_tmp = tail_tmp + 1;
+                    num_entries_tmp = num_entries_tmp + 1; 
+                end
+
+                head_tmp = head_tmp + 1;
+                num_entries_tmp = num_entries_tmp - 1;
+            end
+            FLUSHING: begin
+                head_tmp = head_tmp + 1;
+                num_entries_tmp = num_entries_tmp - 1;
+            end
+            DONE: begin
+                head_tmp = '0;
+                tail_tmp = '0;
+                num_entries_tmp = '0;
+            end
+            default: begin
+                head_tmp = '0;
+                tail_tmp = '0;
+                num_entries_tmp = '0;
+                store_buffer_tmp = '{default:'0};
+            end
+        endcase 
+
     end
-
-
 
 endmodule

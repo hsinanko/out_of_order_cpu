@@ -82,17 +82,27 @@ module IssueExecution_tb();
             n_cycles <= n_cycles + 1;
         end
     end
-
+    integer mcd;
+    assign mcd = $fopen("../test/build/retire_log.txt","w");
     always_ff @(posedge clk)begin
-        if(!rst)begin
-            if(debug_info.retire_valid_0_reg && debug_info.retire_valid_1_reg)
-                $display("Cycle: %5d Retired Address: 0x%08h, 0x%08h", n_cycles, debug_info.retire_addr_0_reg, debug_info.retire_addr_1_reg);
-            else if(debug_info.retire_valid_0_reg)
-                $display("Cycle: %5d Retired Address: 0x%08h", n_cycles, debug_info.retire_addr_0_reg);
-            else if(debug_info.retire_valid_1_reg)
-                $display("Cycle: %5d Retired Address: 0x%08h", n_cycles, debug_info.retire_addr_1_reg);
-            else
-                $display("Cycle: %5d", n_cycles);
+        if(finished)begin
+            $fclose(mcd);
+        end
+        else if(debug_info.retire_valid_0_reg && debug_info.retire_valid_1_reg)begin
+            $fdisplay(mcd, "Cycle: %5d Retired Address: 0x%08h, 0x%08h", n_cycles, debug_info.retire_addr_0_reg, debug_info.retire_addr_1_reg);
+            $display("Cycle: %5d Retired Address: 0x%08h, 0x%08h", n_cycles, debug_info.retire_addr_0_reg, debug_info.retire_addr_1_reg);
+        end
+        else if(debug_info.retire_valid_0_reg)begin
+            $fdisplay(mcd, "Cycle: %5d Retired Address: 0x%08h", n_cycles, debug_info.retire_addr_0_reg);
+            $display("Cycle: %5d Retired Address: 0x%08h", n_cycles, debug_info.retire_addr_0_reg);
+        end
+        else if(debug_info.retire_valid_1_reg)begin
+            $fdisplay(mcd, "Cycle: %5d Retired Address: 0x%08h", n_cycles, debug_info.retire_addr_1_reg);
+            $display("Cycle: %5d Retired Address: 0x%08h", n_cycles, debug_info.retire_addr_1_reg);
+        end
+        else begin
+            $fdisplay(mcd, "Cycle: %5d", n_cycles);
+            $display("Cycle: %5d", n_cycles);
         end
     end
 
@@ -112,7 +122,7 @@ module IssueExecution_tb();
             print_CPU_State(1);
             $finish;
         end
-        else if(n_cycles >= 6000) begin
+        else if(n_cycles >= 40000) begin
             $display("\n\t=========== Max cycle reached, ending simulation ===========\n");
             print_CPU_State(0);
             $finish;

@@ -4,11 +4,14 @@ module Back_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     input logic clk,
     input logic rst,
     input logic flush,
+    input logic done,
     retire_if.retire_pr_sink retire_pr_bus_0,
     retire_if.retire_pr_sink retire_pr_bus_1,
     output [PHY_WIDTH*ARCH_REGS-1:0]back_rat
 );
     logic [PHY_WIDTH-1:0] BACK_RAT [0:ARCH_REGS-1];
+
+    logic [PHY_WIDTH-1:0] BACK_RAT_tmp [0:ARCH_REGS-1];
 
     logic retire_pr_valid_0, retire_pr_valid_1;
     logic [PHY_WIDTH-1:0] rd_arch_0, rd_arch_1;
@@ -25,41 +28,42 @@ module Back_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     assign rd_phy_old_1      = retire_pr_bus_1.retire_pr_pkg.rd_phy_old;
     assign rd_phy_new_1      = retire_pr_bus_1.retire_pr_pkg.rd_phy_new;
     
-    genvar i;
-    integer j;
-    generate
-        for(i = 0; i < ARCH_REGS; i = i + 1) begin : gen_back_rat
-            // continuous assignment for each slice of the packed output
-            assign back_rat[i*PHY_WIDTH +: PHY_WIDTH] = BACK_RAT[i];
-        end
-    endgenerate
+    integer i;
+    // generate
+    //     for(i = 0; i < ARCH_REGS; i = i + 1) begin : gen_back_rat
+    //         // continuous assignment for each slice of the packed output
+    //         assign back_rat[i*PHY_WIDTH +: PHY_WIDTH] = BACK_RAT[i];
+    //     end
+    // endgenerate
 
     // sequential logic for reset and commit updates
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
-            for (j = 0; j < ARCH_REGS; j = j + 1)
-                BACK_RAT[j] <= j;
+            back_rat <= 'h0;
+            for (i = 0; i < ARCH_REGS; i = i + 1)
+                BACK_RAT[i] <= i;
         end
-        else if (!flush) begin
-            if (retire_pr_valid_0) begin
-                if(retire_pr_valid_1 && (rd_arch_0 == rd_arch_1)) begin
-                    // If both retire instructions write to the same architectural register,
-                    // the second instruction's physical register mapping takes precedence
-                    BACK_RAT[rd_arch_0] <= rd_phy_new_1;
-                end
-                else begin
-                    BACK_RAT[rd_arch_0] <= rd_phy_new_0;
-                end
-            end
-            else if (retire_pr_valid_1) begin
-                BACK_RAT[rd_arch_1] <= rd_phy_new_1;
-            end
-            // if (retire_pr_valid_0) begin
-            //     BACK_RAT[rd_arch_0] <= rd_phy_new_0;
-            // end
-            // else if (retire_pr_valid_1) begin
-            //     BACK_RAT[rd_arch_1] <= rd_phy_new_1;
-            // end
+        else if(flush || done) begin
+            // On flush, restore BACK_RAT to previous state
+            for(i = 0; i < ARCH_REGS; i = i + 1) begin : gen_back_rat
+            // continuous assignment for each slice of the packed output
+                back_rat[i*PHY_WIDTH +: PHY_WIDTH] = BACK_RAT[i];
+        end
+        end
+        else begin
+            BACK_RAT <= BACK_RAT_tmp;
+            back_rat <= 'h0;
+        end
+    end
+
+
+    always_comb begin
+        BACK_RAT_tmp = BACK_RAT;
+        if(retire_pr_valid_0) begin
+            BACK_RAT_tmp[rd_arch_0] = rd_phy_new_0;
+        end
+        if(retire_pr_valid_1) begin
+            BACK_RAT_tmp[rd_arch_1] = rd_phy_new_1;
         end
     end
 
@@ -69,8 +73,8 @@ module Back_RAT #(parameter ARCH_REGS = 32, PHY_WIDTH = 6)(
     always_ff @(negedge clk) begin
         mcd = $fopen("../test/build/Back_RAT.txt","w");
 
-        for (j=0; j< ARCH_REGS; j=j+1) begin
-            $fdisplay(mcd,"%2d %3d", j, BACK_RAT[j]);
+        for (i=0; i< ARCH_REGS; i=i+1) begin
+            $fdisplay(mcd,"%2d %3d", i, BACK_RAT[i]);
         end
         $fclose(mcd);
         //$display("Back_RAT contents dumped to Back_RAT file at time %0t", $time);

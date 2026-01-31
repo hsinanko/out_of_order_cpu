@@ -19,16 +19,13 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     input  logic [DATA_WIDTH-1:0] mem_rdata,
     input  logic                  mem_rdata_valid,
     // ========= retire interface ==============
-    input  RETIRE_STORE_t retire_store_0,
-    input  RETIRE_STORE_t retire_store_1,
+    input  RETIRE_STORE_t retire_store,
     // store
     output logic                  mem_write_en,
     output logic [ADDR_WIDTH-1:0] mem_waddr,
     output logic [DATA_WIDTH-1:0] mem_wdata
 );
-
-
-
+    // Store Queue Entry Definition
     STORE_entry_t StoreQueue [0:FIFO_DEPTH-1];
     logic [$clog2(FIFO_DEPTH):0] head_store, tail_store;
     logic [$clog2(FIFO_DEPTH):0] store_count;
@@ -67,18 +64,106 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     // ========== Store Queue Management ==========
     integer i;
 
-    logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id, retire_store_id_0, retire_store_id_1;
-    logic retire_store_valid, retire_store_valid_0, retire_store_valid_1;
+    logic [$clog2(FIFO_DEPTH)-1:0] retire_store_id;
+    logic retire_store_valid;
 
-    assign retire_store_id_0  = retire_store_0.retire_store_id;
-    assign retire_store_valid_0 = retire_store_0.retire_store_valid;
-
-    assign retire_store_id_1  = retire_store_1.retire_store_id;
-    assign retire_store_valid_1 = retire_store_1.retire_store_valid;
-
-    assign retire_store_valid = retire_store_valid_0 || retire_store_valid_1;
-    assign retire_store_id    = (retire_store_valid_0) ? retire_store_id_0 : retire_store_id_1;
+    assign retire_store_id  = retire_store.retire_store_id;
+    assign retire_store_valid = retire_store.retire_store_valid;
     
+
+    logic [1:0] state_s, next_state_s;
+    parameter IDLE_S = 2'b00, INQUEUE = 2'b01, FLUSHING = 2'b10;
+
+    always_ff @(posedge clk or posedge rst) begin
+        if(rst)
+            state_s <= IDLE_S;
+        else
+            state_s <= next_state_s;
+    end
+
+    always_comb begin
+        case(state_s)
+            IDLE_S: begin
+                if(rst)
+                    next_state_s = IDLE_S;
+                else
+                    next_state_s = INQUEUE;
+            end
+            INQUEUE: begin
+                if(flush)
+                    next_state_s = FLUSHING;
+                else
+                    next_state_s = INQUEUE;
+            end
+            FLUSHING: begin
+                if(flush)
+                    next_state_s = FLUSHING;
+                else
+                    next_state_s = IDLE_S;
+            end
+            default:
+                next_state_s = IDLE_S;
+        endcase
+    end
+
+    always_comb begin
+        case(state_s)
+            IDLE_S: begin
+                for(i = 0; i < FIFO_DEPTH; i = i + 1) begin
+                    StoreQueue[i].age   <= 0;
+                    StoreQueue[i].addr  <= 0;
+                    StoreQueue[i].data  <= 0;
+                    StoreQueue[i].valid <= 1'b0;
+                end
+                mem_write_en = 1'b0;
+                mem_waddr    = 'h0;
+                mem_wdata    = 'h0;
+                store_count  = 0;
+            end
+            INQUEUE: begin
+                if(isStore) begin
+                    StoreQueue[free_store_id].age   = current_age;
+                    StoreQueue[free_store_id].addr  = exe_lsu.store_waddr;
+                    StoreQueue[free_store_id].data  = exe_lsu.store_wdata;
+                    StoreQueue[free_store_id].valid = exe_lsu.store_valid;
+                    store_count = store_count + 1;
+                end
+
+                if(retire_store_valid) begin
+                    StoreQueue[retire_store_id].valid = 1'b0;
+                    mem_write_en = 1'b1;
+                    mem_waddr    = StoreQueue[retire_store_id].addr;
+                    mem_wdata    = StoreQueue[retire_store_id].data;
+                    store_count  = store_count - 1;
+                end
+                else begin
+                    mem_write_en = 1'b0;
+                    mem_waddr    = 'h0;
+                    mem_wdata    = 'h0;
+                end
+            end
+            FLUSHING: begin
+                if(retire_store_valid) begin
+                    StoreQueue[retire_store_id].valid = 1'b0;
+                    mem_write_en = 1'b1;
+                    mem_waddr    = StoreQueue[retire_store_id].addr;
+                    mem_wdata    = StoreQueue[retire_store_id].data;
+                    store_count  = store_count - 1;
+                end
+                else begin
+                    mem_write_en = 1'b0;
+                    mem_waddr    = 'h0;
+                    mem_wdata    = 'h0;
+                end
+            end
+            default: begin
+                mem_write_en = 1'b0;
+                mem_waddr    = 'h0;
+                mem_wdata    = 'h0;
+            end
+        endcase
+    end
+
     logic [$clog2(FIFO_DEPTH)-1:0] free_store_id;
     FreeEntry #(FIFO_DEPTH) store_free_entry (
         .clk(clk),
@@ -95,70 +180,6 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     assign wb_store.store_valid = (isStore) ? 1'b1 : 1'b0;
     assign wb_store.store_rob_id = (isStore) ? exe_lsu.store_rob_id : 'hx;
     assign wb_store.store_id = (isStore) ? free_store_id : 'hx;
-
-    always_ff @(posedge clk or posedge rst) begin
-        if(rst) begin
-            for(i = 0; i < FIFO_DEPTH; i = i + 1) begin
-                StoreQueue[i].age   <= 0;
-                StoreQueue[i].addr  <= 0;
-                StoreQueue[i].data  <= 0;
-                StoreQueue[i].valid <= 1'b0;
-            end
-            store_count <= 0;
-        end
-        else if(flush) begin
-            for(i = 0; i < FIFO_DEPTH; i = i + 1) begin
-                StoreQueue[i].age   <= 0;
-                StoreQueue[i].addr  <= 0;
-                StoreQueue[i].data  <= 0;
-                StoreQueue[i].valid <= 1'b0;
-            end
-            store_count <= 0;
-            mem_write_en <= 1'b0;
-            mem_waddr    <= 'h0;
-            mem_wdata    <= 'h0;
-        end
-        else begin
-            if(isStore) begin
-                StoreQueue[free_store_id].age   <= current_age;
-                StoreQueue[free_store_id].addr  <= exe_lsu.store_waddr;
-                StoreQueue[free_store_id].data  <= exe_lsu.store_wdata;
-                StoreQueue[free_store_id].valid <= exe_lsu.store_valid;
-            end
-
-            if(retire_store_valid_0) begin
-                StoreQueue[retire_store_id_0].valid <= 1'b0;
-                mem_write_en <= 1'b1;
-                mem_waddr    <= StoreQueue[retire_store_id_0].addr;
-                mem_wdata    <= StoreQueue[retire_store_id_0].data;
-            end
-            else if(retire_store_valid_1) begin
-                StoreQueue[retire_store_id_1].valid <= 1'b0;
-                mem_write_en <= 1'b1;
-                mem_waddr    <= StoreQueue[retire_store_id_1].addr;
-                mem_wdata    <= StoreQueue[retire_store_id_1].data;
-            end
-            else begin
-                mem_write_en <= 1'b0;
-                mem_waddr    <= 'h0;
-                mem_wdata    <= 'h0;
-            end
-
-            if(isStore && isRetire) begin
-                store_count <= store_count;
-            end
-            else if(isStore && !isRetire) begin
-                store_count <= store_count + 1;
-            end
-            else if(!isStore && isRetire) begin
-                store_count <= store_count - 1;
-            end
-            else begin
-                store_count <= store_count;
-            end
-
-        end
-    end
 
     // ========== Load Queue Management ==========
 
@@ -238,8 +259,6 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
     always_ff @(posedge clk or posedge rst) begin
         if(rst)
             state <= IDLE;
-        else if(flush)
-            state <= IDLE;
         else
             state <= next_state;
     end
@@ -253,16 +272,26 @@ module LoadStoreQueue #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, FIFO_DEPTH =
                     next_state = IDLE;
             end
             CHECK: begin
-                next_state = (LoadEntry.valid) ? SEND: WAIT;
+                if(flush)
+                    next_state = IDLE;
+                else
+                    next_state = (LoadEntry.valid) ? SEND: WAIT;
             end
             SEND: begin
-                next_state = IDLE;
+                if(flush)
+                    next_state = IDLE;
+                else
+                    next_state = IDLE;
             end
             WAIT: begin
-                if(mem_rdata_valid)
-                    next_state = SEND;
-                else
-                    next_state = WAIT;
+                if(flush)
+                    next_state = IDLE;
+                else begin
+                    if(mem_rdata_valid)
+                        next_state = SEND;
+                    else
+                        next_state = WAIT;
+                end
             end
             default:
                 next_state = IDLE;

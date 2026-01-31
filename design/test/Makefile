@@ -54,6 +54,7 @@ WB = \
 		../src/WriteBack/WriteBack.sv
 
 RE = \
+		../src/Retire/StoreBuffer.sv \
 		../src/Retire/Retire.sv
 
 TB ?= IssueExecution_tb

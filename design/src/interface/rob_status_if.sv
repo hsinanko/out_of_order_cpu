@@ -1,11 +1,11 @@
 interface rob_status_if #(NUM_ROB_ENTRY = 32, ROB_WIDTH = 5)();
     import typedef_pkg::*;
-    logic [NUM_ROB_ENTRY-1:0]       rob_finish;
     ROB_ENTRY_t rob[NUM_ROB_ENTRY-1:0];
-    logic [NUM_ROB_ENTRY-1:0]       rob_head;
-    logic                           rob_full;
-    logic                           rob_empty;
-    logic [ROB_WIDTH-1:0]           retire_num;
+    logic [NUM_ROB_ENTRY-1:0] rob_finish;
+    logic [ROB_WIDTH-1:0]  rob_head;
+    logic                  rob_full;
+    logic                  rob_empty;
+    logic [ROB_WIDTH-1:0]  retire_num;
 
     modport source(
         output rob_finish,

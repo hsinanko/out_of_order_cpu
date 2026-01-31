@@ -38,7 +38,7 @@ module BranchUnit #(parameter ADDR_WIDTH = 32, DATA_WIDTH = 32, PHY_WIDTH = 6, R
     assign branchTarget = instruction_addr + immediate;
     assign jalTarget    = branchTarget;
     assign jalrTarget   = (rs1_data_branch + immediate);
-    assign nextPC       = (opcode == JALR || opcode == JAL) ? (instruction_addr + 32'h4) : 'h0;
+    assign nextPC       = ((opcode == JALR || opcode == JAL) && (rd_phy_branch != 'h0))? (instruction_addr + 32'h4) : 'h0;
     always_comb begin
         if(opcode == BRANCH)begin
             case(funct3)
